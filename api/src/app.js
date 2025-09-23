@@ -37,6 +37,12 @@ app.use('/api/upload', uploadRoutes);
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
+// Health simple
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, uptime: process.uptime() });
+});
+
+
 // 500
 app.use((err, req, res, next) => {
   console.error(err);
