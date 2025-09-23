@@ -656,7 +656,7 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
         </header>
 
         <Routes>
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard" element={<Dashboard apiFetch={apiFetch} onAuthError={handleLogout} />} />
           <Route path="/" element={reportPage} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

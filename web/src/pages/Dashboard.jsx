@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-const API = import.meta.env.VITE_API_BASE_URL;
+const EMPTY_STATS = { total: 0, byStatus: { pendiente: 0, tratamiento: 0, concluido: 0 }, compliance: 0 };
 
 function Donut({ value = 0 }) {
   // value: 0..100
@@ -17,14 +17,15 @@ function Donut({ value = 0 }) {
   );
 }
 
-export default function Dashboard() {
+export default function Dashboard({ apiFetch, onAuthError }) {
   const [items, setItems] = useState([]);
   const [period, setPeriod] = useState('day');       // 'day' | 'month' | 'year'
   const [date, setDate] = useState(() => new Date().toISOString().slice(0,10));
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0,7));
   const [year, setYear] = useState(() => String(new Date().getFullYear()));
-  const [stats, setStats] = useState({ total: 0, byStatus: { pendiente:0, tratamiento:0, concluido:0 }, compliance: 0 });
+  const [stats, setStats] = useState(EMPTY_STATS);
   const [query, setQuery] = useState('');
+  const [error, setError] = useState('');
 
   const params = useMemo(() => {
     const p = new URLSearchParams();
@@ -36,25 +37,64 @@ export default function Dashboard() {
     return p.toString();
   }, [period, date, month, year, query]);
 
+  async function requestJSON(path, options = undefined, fallback) {
+    try {
+      const res = await apiFetch(path, options);
+      if (res.status === 401) {
+        setError('Sesión expirada. Vuelve a iniciar sesión.');
+        onAuthError?.();
+        return fallback;
+      }
+      if (!res.ok) {
+        setError('No se pudo cargar la información del dashboard.');
+        return fallback;
+      }
+      const data = await res.json();
+      setError('');
+      return data;
+    } catch (err) {
+      console.error(err);
+      setError('Error de red al consultar el dashboard.');
+      return fallback;
+    }
+  }
+
   async function fetchList() {
-    const res = await fetch(`${API}/reports?${params}`, { credentials: 'include' });
-    setItems(await res.json());
+    const data = await requestJSON(`/reports?${params}`, undefined, []);
+    setItems(Array.isArray(data) ? data : []);
   }
   async function fetchStats() {
-    const res = await fetch(`${API}/reports/stats/summary?${params}`, { credentials: 'include' });
-    setStats(await res.json());
+    const data = await requestJSON(`/reports/stats/summary?${params}`, undefined, EMPTY_STATS);
+    setStats({
+      total: data?.total ?? 0,
+      compliance: data?.compliance ?? 0,
+      byStatus: {
+        pendiente: data?.byStatus?.pendiente ?? 0,
+        tratamiento: data?.byStatus?.tratamiento ?? 0,
+        concluido: data?.byStatus?.concluido ?? 0,
+      },
+    });
   }
 
   useEffect(() => { fetchList(); fetchStats(); }, [params]);
 
   async function changeStatus(id, next) {
-    const res = await fetch(`${API}/reports/${id}/status`, {
+    const res = await apiFetch(`/reports/${id}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ status: next })
     });
-    if (res.ok) { fetchList(); fetchStats(); }
+    if (res.status === 401) {
+      setError('Sesión expirada. Vuelve a iniciar sesión.');
+      onAuthError?.();
+      return;
+    }
+    if (!res.ok) {
+      setError('No se pudo actualizar el estado.');
+      return;
+    }
+    setError('');
+    fetchList();
+    fetchStats();
   }
 
   return (
@@ -95,6 +135,12 @@ export default function Dashboard() {
             className="border rounded px-3 py-2 w-full"/>
         </div>
       </div>
+
+      {error && (
+        <div className="bg-red-100 text-red-700 border border-red-200 rounded-xl px-4 py-2 text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
