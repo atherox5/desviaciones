@@ -1,0 +1,15 @@
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Que la app ocupe el alto completo */
+html, body, #root { height: 100%; }
+
+/* Tipografías del sistema (opcional) */
+:root {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+}
+
+/* Importante: no pongas aquí body { display:flex ... } ni backgrounds.
+   El layout y colores los controlamos con clases de Tailwind en los componentes. */
