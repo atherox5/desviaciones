@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from "react-router-dom";
 import Dashboard from "./pages/Dashboard.jsx";
+import UsersAdmin from "./pages/UsersAdmin.jsx";
 
 // ==============================================
 // Frontend conectado a API + Exportar a PDF + Visor de Fotos (modal)
@@ -75,6 +76,23 @@ async function authLogout() {
   accessToken = null;
 }
 
+async function authRefresh() {
+  const res = await fetch(`${API}/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  accessToken = data.access;
+  return data.user;
+}
+
+async function authStatus() {
+  const res = await fetch(`${API}/auth/status`, { credentials: 'include' });
+  if (!res.ok) return { usersExist: true };
+  return res.json();
+}
+
 async function listReports({ owner } = {}) {
   const q = new URLSearchParams();
   if (owner) q.set("owner", owner);
@@ -95,6 +113,27 @@ async function updateReport(id, payload) {
 async function deleteReport(id) {
   const res = await apiFetch(`/reports/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("No se pudo eliminar");
+  return res.json();
+}
+
+async function listUsers() {
+  const res = await apiFetch(`/users`);
+  if (res.status === 401) throw new Error('Sesión expirada');
+  if (!res.ok) throw new Error('No se pudo listar usuarios');
+  return res.json();
+}
+
+async function updateUserProfile(id, payload) {
+  const res = await apiFetch(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  if (res.status === 401) throw new Error('Sesión expirada');
+  if (res.status === 409) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data?.error || 'Usuario en uso');
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data?.error || 'No se pudo actualizar usuario');
+  }
   return res.json();
 }
 
@@ -333,9 +372,39 @@ function AppInner() {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [booting, setBooting] = useState(true);
 
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await authStatus();
+        if (!cancelled) setUsersExist(Boolean(status?.usersExist));
+      } catch (e) {
+        console.warn('No se pudo obtener estado de usuarios', e);
+      }
+
+      try {
+        const user = await authRefresh();
+        if (user) {
+          if (!cancelled) setCurrentUser(user);
+          return;
+        }
+      } catch (e) {
+        console.warn('Refresh falló', e);
+      }
+      accessToken = null;
+      if (!cancelled) setCurrentUser(null);
+    })().finally(() => {
+      if (!cancelled) setBooting(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const redirectToDashboard = () => {
     if (location.pathname !== "/dashboard") navigate("/dashboard", { replace: true });
@@ -346,6 +415,9 @@ function AppInner() {
         ? "bg-indigo-600 text-white shadow"
         : "bg-gray-800/70 text-gray-200 hover:bg-gray-700/80"
     }`;
+
+  const fetchUsersList = useCallback(() => listUsers(), []);
+  const updateUserFn = useCallback((id, payload) => updateUserProfile(id, payload), []);
 
   // NUEVO: visor de fotos
   const [viewer, setViewer] = useState({ open: false, index: 0 });
@@ -386,10 +458,14 @@ function AppInner() {
       const user = await authSetupAdmin(u,p);
       setCurrentUser(user);
       setAuthError("");
+      setUsersExist(true);
       redirectToDashboard();
     } catch(e) {
       setAuthError(e.message || 'Error');
-      setUsersExist(false);
+      try {
+        const status = await authStatus();
+        setUsersExist(Boolean(status?.usersExist));
+      } catch {}
     }
   };
   const handleLogin = async (u,p) => {
@@ -397,6 +473,7 @@ function AppInner() {
       const user = await authLogin(u,p);
       setCurrentUser(user);
       setAuthError("");
+      setUsersExist(true);
       redirectToDashboard();
     } catch(e) {
       setAuthError(e.message || 'Error');
@@ -408,6 +485,7 @@ function AppInner() {
       const user = await authLogin(u,p);
       setCurrentUser(user);
       setAuthError("");
+      setUsersExist(true);
       redirectToDashboard();
     } catch(e) {
       setAuthError(e.message || 'Error');
@@ -418,6 +496,7 @@ function AppInner() {
     setCurrentUser(null);
     setForm(emptyReport());
     setItems([]);
+    setUsersExist(true);
     if (location.pathname !== "/") navigate("/", { replace: true });
   };
 
@@ -439,8 +518,14 @@ function AppInner() {
           payload.fotos = payload.fotos.filter(f=>!f.url?.startsWith("data:"));
         }
       }
-      let saved; if (!form._id) saved = await createReport(payload); else saved = await updateReport(form._id, payload);
-      setForm({ ...emptyReport(), ...saved });
+      let saved;
+      if (!form._id) saved = await createReport(payload); else saved = await updateReport(form._id, payload);
+      setForm((prev) => {
+        const base = emptyReport();
+        const merged = { ...base, ...prev, ...saved };
+        merged.status = merged.status || prev.status || base.status;
+        return merged;
+      });
       const list = await listReports({ owner: currentUser.role==='admin' && !onlyMine ? undefined : 'me' });
       setItems(list); alert("Guardado ✔");
     } catch (e) { console.error(e); alert("No se pudo guardar"); }
@@ -477,6 +562,16 @@ function AppInner() {
   }
 
   const filtered = useMemo(()=> items, [items]);
+
+  if (booting) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-gray-100 flex items-center justify-center">
+        <div className="px-4 py-3 bg-gray-900/70 border border-gray-800 rounded-2xl text-sm text-gray-300">
+          Validando sesión…
+        </div>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return (
@@ -677,6 +772,9 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
             <nav className="flex flex-wrap gap-2">
               <NavLink to="/" className={navLinkClass}>Reportes</NavLink>
               <NavLink to="/dashboard" className={navLinkClass}>Dashboard</NavLink>
+              {currentUser.role === 'admin' && (
+                <NavLink to="/usuarios" className={navLinkClass}>Usuarios</NavLink>
+              )}
             </nav>
           </div>
           <div className="flex items-center gap-2">
@@ -689,6 +787,21 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
 
         <Routes>
           <Route path="/dashboard" element={<Dashboard apiFetch={apiFetch} onAuthError={handleLogout} />} />
+          <Route
+            path="/usuarios"
+            element={
+              currentUser.role === 'admin'
+                ? (
+                  <UsersAdmin
+                    currentUser={currentUser}
+                    onAuthError={handleLogout}
+                    onFetchUsers={fetchUsersList}
+                    onUpdateUser={updateUserFn}
+                  />
+                )
+                : <Navigate to="/" replace />
+            }
+          />
           <Route path="/" element={reportPage} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

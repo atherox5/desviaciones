@@ -10,6 +10,7 @@ import { env } from './config.js';
 import authRoutes from './routes/auth.js';
 import reportsRoutes from './routes/reports.js';
 import uploadRoutes from './routes/upload.js';
+import usersRoutes from './routes/users.js';
 
 const app = express();
 
@@ -52,6 +53,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true, uptime: process.uptime
 app.use('/api/auth', authRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/users', usersRoutes);
 
 /** 404 */
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
@@ -63,4 +65,3 @@ app.use((err, req, res, next) => {
 });
 
 export default app;
-

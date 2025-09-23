@@ -189,6 +189,7 @@ router.put('/:id', async (req, res) => {
 
   const data = { ...parsed.data, fotos: cleanFotos(parsed.data.fotos) };
   delete data.folio;                        // <- folio NO se puede editar (nadie)
+  if (data.status === undefined) delete data.status;
 
   Object.assign(it, data);
 

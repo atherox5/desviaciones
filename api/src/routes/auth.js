@@ -53,6 +53,11 @@ router.post('/login', async (req, res) => {
   res.json({ user: { id: user._id, username: user.username, role: user.role }, access });
 });
 
+router.get('/status', async (req, res) => {
+  const total = await User.countDocuments();
+  res.json({ usersExist: total > 0 });
+});
+
 router.post('/refresh', async (req, res) => {
   const token = req.cookies?.refreshToken;
   if (!token) return res.status(401).json({ error: 'No refresh' });
@@ -61,8 +66,9 @@ router.post('/refresh', async (req, res) => {
     const { id } = jwt.default.verify(token, env.REFRESH_JWT_SECRET);
     const user = await User.findById(id);
     if (!user) return res.status(401).json({ error: 'Usuario no existe' });
-    const access = signAccessToken({ id: user._id, username: user.username, role: user.role });
-    res.json({ access });
+    const payload = { id: user._id, username: user.username, role: user.role };
+    const access = signAccessToken(payload);
+    res.json({ access, user: payload });
   } catch (e) {
     return res.status(401).json({ error: 'Refresh inválido' });
   }
