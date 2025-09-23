@@ -1,4 +1,3 @@
-// api/src/routes/reports.js
 import { Router } from 'express';
 import { z } from 'zod';
 import Report from '../models/Report.js';
@@ -7,14 +6,14 @@ import { authRequired } from '../middleware/auth.js';
 const router = Router();
 
 const fotoZ = z.object({
-  url: z.string().url(), // http/https
+  url: z.string().url(),
   nota: z.string().optional().default(''),
 });
 
 const reportZ = z.object({
-  folio: z.string().optional(),           // -> se autogenera si falta o colisiona
-  fecha: z.string(),                      // YYYY-MM-DD
-  hora: z.string(),                       // HH:mm
+  folio: z.string().optional(),           // se ignora en update, solo autogenerado
+  fecha: z.string(),
+  hora: z.string(),
   reportante: z.string().optional().default(''),
   area: z.string().optional().default(''),
   ubicacion: z.string().optional().default(''),
@@ -31,11 +30,9 @@ const reportZ = z.object({
 
 router.use(authRequired);
 
-/* ========================= Helpers ========================= */
 const pad2 = (n) => String(n).padStart(2, '0');
 
 function toDateSafe(str) {
-  // Acepta "YYYY-MM-DD" o cae a hoy
   if (typeof str === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(str)) {
     const [y, m, d] = str.split('-').map(Number);
     return new Date(y, m - 1, d);
@@ -44,7 +41,6 @@ function toDateSafe(str) {
   return isNaN(d.getTime()) ? new Date() : d;
 }
 
-// ddmmyy (ej: 25-09-23 -> "250923")
 function toDDMMYY(str) {
   const d = toDateSafe(str);
   const dd = pad2(d.getDate());
@@ -53,13 +49,10 @@ function toDDMMYY(str) {
   return `${dd}${mm}${yy}`;
 }
 
-// Calcula el siguiente folio para la fecha dada, buscando el mayor sufijo numérico.
-// Soporta sufijos de 2 o 3 dígitos (01..99..100..)
 async function nextFolioForDate(fechaStr) {
   const base = toDDMMYY(fechaStr);
   const prefix = `DESV-${base}-`;
 
-  // Agregación: extrae sufijo numérico y obtiene el máximo
   const [last] = await Report.aggregate([
     { $match: { folio: { $regex: `^${prefix}\\d{2,3}$` } } },
     {
@@ -78,17 +71,14 @@ async function nextFolioForDate(fechaStr) {
   return prefix + String(next).padStart(pad, '0');
 }
 
-// Limpia y normaliza array de fotos
 function cleanFotos(arr = []) {
   return (arr || [])
     .filter((f) => f && typeof f.url === 'string' && /^https?:\/\//.test(f.url))
     .map((f) => ({ url: f.url, nota: f.nota || '' }));
 }
 
-/* ========================= Rutas ========================= */
+// ========================= Rutas =========================
 
-// (Opcional) Previsualizar próximo folio para una fecha dada
-// GET /api/reports/next-folio?fecha=YYYY-MM-DD
 router.get('/next-folio', async (req, res) => {
   try {
     const fecha = (req.query.fecha || '').toString();
@@ -100,14 +90,11 @@ router.get('/next-folio', async (req, res) => {
   }
 });
 
-// Listado con filtros básicos
-// GET /api/reports?owner=me|all&q=texto
 router.get('/', async (req, res) => {
   const owner = req.query.owner;
   const q = (req.query.q || '').toString().trim();
   const filter = {};
 
-  // Convencional solo ve los propios; admin puede ver todos o "me"
   if (req.user.role !== 'admin') filter.ownerId = req.user.id;
   else if (owner === 'me') filter.ownerId = req.user.id;
 
@@ -128,7 +115,6 @@ router.get('/', async (req, res) => {
   res.json(items);
 });
 
-// Crear (autogenera folio si falta o colisiona)
 router.post('/', async (req, res) => {
   const parsed = reportZ.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Datos inválidos' });
@@ -138,7 +124,6 @@ router.post('/', async (req, res) => {
   let folio = (data.folio || '').trim();
   if (!folio) folio = await nextFolioForDate(data.fecha);
 
-  // Reintentos por colisiones de índice único (concurrencia)
   for (let i = 0; i < 5; i++) {
     try {
       const item = await Report.create({
@@ -149,7 +134,6 @@ router.post('/', async (req, res) => {
       });
       return res.status(201).json(item);
     } catch (e) {
-      // 11000 = duplicate key (folio único)
       if (e?.code === 11000 && e?.keyPattern?.folio) {
         folio = await nextFolioForDate(data.fecha);
         continue;
@@ -161,7 +145,6 @@ router.post('/', async (req, res) => {
   return res.status(409).json({ error: 'No se pudo generar folio único, reintente' });
 });
 
-// Obtener por id
 router.get('/:id', async (req, res) => {
   const it = await Report.findById(req.params.id);
   if (!it) return res.status(404).json({ error: 'No encontrado' });
@@ -171,7 +154,6 @@ router.get('/:id', async (req, res) => {
   res.json(it);
 });
 
-// Actualizar (si cambian folio y choca, asigna el siguiente de la fecha)
 router.put('/:id', async (req, res) => {
   const it = await Report.findById(req.params.id);
   if (!it) return res.status(404).json({ error: 'No encontrado' });
@@ -183,12 +165,7 @@ router.put('/:id', async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: 'Datos inválidos' });
 
   const data = { ...parsed.data, fotos: cleanFotos(parsed.data.fotos) };
-
-  // Si viene un folio diferente y ya existe en otro doc, reasigna al siguiente
-  if (data.folio && data.folio !== it.folio) {
-    const exists = await Report.findOne({ folio: data.folio, _id: { $ne: it._id } });
-    if (exists) data.folio = await nextFolioForDate(data.fecha || it.fecha);
-  }
+  delete data.folio; // 🔒 impedir cambios de folio
 
   Object.assign(it, data);
 
@@ -196,18 +173,11 @@ router.put('/:id', async (req, res) => {
     await it.save();
     res.json(it);
   } catch (e) {
-    if (e?.code === 11000 && e?.keyPattern?.folio) {
-      // Último salvavidas: si chocó, generamos otro y guardamos
-      it.folio = await nextFolioForDate(it.fecha);
-      await it.save();
-      return res.json(it);
-    }
     console.error('[PUT /reports/:id] error:', e);
     res.status(500).json({ error: 'No se pudo actualizar' });
   }
 });
 
-// Eliminar
 router.delete('/:id', async (req, res) => {
   const it = await Report.findById(req.params.id);
   if (!it) return res.status(404).json({ error: 'No encontrado' });

@@ -1,18 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 
-// ==============================================
-// Frontend conectado a API + Exportar a PDF + Visor de Fotos (modal)
-// - VITE_API_BASE_URL (http://localhost:8081/api o 8082 según .env.local)
-// - Auth real (JWT access en memoria + refresh httpOnly)
-// - CRUD de Reportes
-// - Subida a Cloudinary si el backend tiene firma activa
-// - Botón "Exportar PDF" en Paso 5 (Resumen)
-// - NUEVO: Click en fotos -> visor modal con Anterior/Siguiente + botón Cerrar (arriba izquierda)
-// ==============================================
-
 const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8081/api";
-let accessToken = null; // en memoria; refresh via cookie httpOnly
+let accessToken = null;
 
+// ==================== API helpers ====================
 async function apiFetch(path, options = {}, retry = true) {
   const headers = new Headers(options.headers || {});
   if (!(options.body instanceof FormData)) headers.set("Content-Type", headers.get("Content-Type") || "application/json");
@@ -39,7 +30,7 @@ async function authLogin(username, password) {
   if (!res.ok) throw new Error("Credenciales inválidas");
   const data = await res.json();
   accessToken = data.access;
-  return data.user; // {id, username, role}
+  return data.user;
 }
 
 async function authRegister(username, password) {
@@ -71,10 +62,11 @@ async function authLogout() {
   accessToken = null;
 }
 
-async function listReports({ owner } = {}) {
-  const q = new URLSearchParams();
-  if (owner) q.set("owner", owner);
-  const res = await apiFetch(`/reports?${q.toString()}`);
+async function listReports({ owner, q } = {}) {
+  const params = new URLSearchParams();
+  if (owner) params.set("owner", owner);
+  if (q) params.set("q", q);
+  const res = await apiFetch(`/reports?${params.toString()}`);
   if (!res.ok) throw new Error("No se pudo listar");
   return res.json();
 }
@@ -94,31 +86,6 @@ async function deleteReport(id) {
   return res.json();
 }
 
-// Firma + subida a Cloudinary (si está configurado). Si falla, devolvemos null para cada archivo.
-async function getSignature(folder) {
-  const ts = Math.floor(Date.now() / 1000);
-  const res = await apiFetch(`/upload/signature`, { method: "POST", body: JSON.stringify({ timestamp: ts, folder }) });
-  if (!res.ok) return null;
-  return { ...(await res.json()), timestamp: ts };
-}
-async function uploadToCloudinary(files, { cloudName, apiKey, signature, timestamp, folder }) {
-  async function uploadOne(file) {
-    const form = new FormData();
-    form.append("file", file);
-    form.append("api_key", apiKey);
-    form.append("timestamp", String(timestamp));
-    form.append("folder", folder);
-    form.append("signature", signature);
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, { method: "POST", body: form });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.secure_url || data.url || null;
-  }
-  const out = [];
-  for (const f of files) out.push(await uploadOne(f));
-  return out;
-}
-
 // =================== UI Helpers ===================
 const pad2 = (n) => (n < 10 ? `0${n}` : `${n}`);
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
@@ -128,17 +95,6 @@ const TIPOS = ["Seguridad","Calidad","Medio Ambiente","Mantención","Producción
 const SEVERIDADES = ["Baja","Media","Alta","Crítica"];
 const AREAS = ["Planta Concentradora","Líneas STR 28\"","Líneas STR 36\"","Chancado","Espesadores","Relaves","Mantenimiento","Operaciones Mina"];
 
-const steps = [
-  { id: 1, title: "Datos básicos" },
-  { id: 2, title: "Clasificación y descripción" },
-  { id: 3, title: "Acciones y responsables" },
-  { id: 4, title: "Evidencias (fotos)" },
-  { id: 5, title: "Revisión" },
-];
-
-function Badge({ children, color = "bg-indigo-600" }) {
-  return <span className={`inline-flex items-center rounded-full ${color} text-white px-2 py-0.5 text-xs font-semibold`}>{children}</span>;
-}
 function Campo({ label, required, children }) {
   return (
     <label className="block mb-3">
@@ -150,44 +106,6 @@ function Campo({ label, required, children }) {
 function TextInput(props) { return <input {...props} className={`w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 ${props.className||""}`} /> }
 function TextArea(props) { return <textarea {...props} className={`w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[88px] disabled:opacity-60 ${props.className||""}`} /> }
 function Select(props) { return <select {...props} className={`w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 ${props.className||""}`}>{props.children}</select> }
-
-/* ----------------- Visor de fotos (modal, no pantalla completa) ----------------- */
-function Lightbox({ photos, index, onClose, onPrev, onNext }) {
-  if (!photos || !photos.length) return null;
-  const photo = photos[index] || photos[0];
-  return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl max-w-5xl w-full">
-        <button onClick={onClose} className="absolute left-3 top-3 text-white/90 bg-gray-800 hover:bg-gray-700 rounded-full w-9 h-9 grid place-items-center" aria-label="Cerrar">×</button>
-        <div className="flex items-center gap-3 p-4">
-          <button onClick={onPrev} className="shrink-0 bg-gray-800 hover:bg-gray-700 text-white rounded-full w-10 h-10" aria-label="Anterior">‹</button>
-          <div className="flex-1 overflow-hidden">
-            <img src={photo.url} alt="Evidencia" className="mx-auto max-h-[70vh] w-auto rounded-xl object-contain" />
-            {photo.nota && <div className="text-xs text-gray-300 mt-2 text-center px-2">{photo.nota}</div>}
-          </div>
-          <button onClick={onNext} className="shrink-0 bg-gray-800 hover:bg-gray-700 text-white rounded-full w-10 h-10" aria-label="Siguiente">›</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FotosGrid({ fotos, uploading, onNota, onRemove, canEdit, onPreview }) {
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-      {fotos.map((f, idx) => (
-        <div key={idx} className="bg-gray-800/60 border border-gray-700 rounded-2xl overflow-hidden">
-          <img src={f.url} alt={`Foto ${idx+1}`} className="w-full h-40 object-cover cursor-zoom-in" onClick={()=>onPreview?.(idx)} />
-          <div className="p-2">
-            <TextInput value={f.nota||""} onChange={(e)=>onNota(idx, e.target.value)} disabled={!canEdit} placeholder="Nota/Comentario" />
-            <button onClick={()=>onRemove(idx)} disabled={!canEdit} className="mt-2 w-full text-sm bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white rounded-lg py-1">Eliminar</button>
-          </div>
-        </div>
-      ))}
-      {uploading && <div className="h-40 flex items-center justify-center rounded-2xl border border-dashed border-gray-700 text-gray-400">Subiendo…</div>}
-    </div>
-  );
-}
 
 const emptyReport = () => ({
   _id: null,
@@ -205,414 +123,98 @@ const emptyReport = () => ({
   responsable: "",
   compromiso: "",
   tags: "",
-  fotos: [], // {url, nota}
+  fotos: [],
   ownerId: null,
   ownerName: "",
 });
 
-function LoginScreen({ usersExist, onSetupAdmin, onLogin, onRegister, error }) {
-  const [tab, setTab] = useState(usersExist ? "login" : "setup");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  return (
-    <div className="max-w-md mx-auto bg-gray-900/60 border border-gray-800 rounded-2xl p-6">
-      <div className="flex items-center gap-2 mb-4">
-        {!usersExist && (
-          <button className={`px-3 py-1.5 rounded-lg text-sm ${tab==='setup'? 'bg-indigo-600 text-white':'bg-gray-800 text-gray-200'}`} onClick={()=>setTab('setup')}>Configurar admin</button>
-        )}
-        <button className={`px-3 py-1.5 rounded-lg text-sm ${tab==='login'? 'bg-indigo-600 text-white':'bg-gray-800 text-gray-200'}`} onClick={()=>setTab('login')}>Iniciar sesión</button>
-        <button className={`px-3 py-1.5 rounded-lg text-sm ${tab==='register'? 'bg-indigo-600 text-white':'bg-gray-800 text-gray-200'}`} onClick={()=>setTab('register')}>Registrarse</button>
-      </div>
-      {error && <div className="mb-3 text-sm text-red-400">{error}</div>}
-      <Campo label="Usuario" required><TextInput value={username} onChange={(e)=>setUsername(e.target.value)} /></Campo>
-      <Campo label="Contraseña" required><TextInput type="password" value={password} onChange={(e)=>setPassword(e.target.value)} /></Campo>
-      {tab==='setup' && <button onClick={()=>onSetupAdmin(username,password)} className="w-full px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm">Crear superusuario</button>}
-      {tab==='login' && <button onClick={()=>onLogin(username,password)} className="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Entrar</button>}
-      {tab==='register' && <button onClick={()=>onRegister(username,password)} className="w-full px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm">Crear cuenta (usuario)</button>}
-    </div>
-  );
-}
-
-// ===== Utilidades para PDF =====
-async function dataURLFromURL(url) {
-  if (!url) return null;
-  if (url.startsWith('data:')) return url; // ya es base64
-  try {
-    const res = await fetch(url);
-    const blob = await res.blob();
-    return await new Promise((resolve)=>{ const fr=new FileReader(); fr.onload=()=>resolve(fr.result); fr.readAsDataURL(blob); });
-  } catch { return null; }
-}
-
-async function exportReportPDF(r) {
-  const { default: jsPDF } = await import('jspdf');
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-  const margin = 40; const pageW = doc.internal.pageSize.getWidth(); const pageH = doc.internal.pageSize.getHeight();
-  let y = margin;
-
-  const addTitle = (t) => { doc.setFontSize(16); doc.setFont('helvetica','bold'); doc.text(t, margin, y); y += 22; };
-  const addKV = (left, right) => { doc.setFontSize(11); doc.setFont('helvetica','normal'); doc.text(left, margin, y); doc.text(right, pageW/2, y); y += 16; };
-  const addSection = (title, body) => {
-    if (!body) return; doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text(title, margin, y); y += 14; doc.setFont('helvetica','normal');
-    const lines = doc.splitTextToSize(body, pageW - margin*2);
-    for (const line of lines) { if (y > pageH - margin) { doc.addPage(); y = margin; } doc.text(line, margin, y); y += 14; }
-    y += 6;
-  };
-  const addBadge = (label) => { const w = doc.getTextWidth(label)+14; const h=18; if (y > pageH - margin) { doc.addPage(); y = margin; }
-    doc.setFillColor(76, 29, 149); // indigo-900
-    doc.roundedRect(pageW - margin - w, margin-4, w, h, 6, 6, 'F');
-    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.text(label, pageW - margin - w + 7, margin + 9);
-    doc.setTextColor(0,0,0);
-  };
-
-  addTitle('Reporte de Desviaciones');
-  addBadge(r.severidad || '-');
-  addKV(`Folio: ${r.folio || '-'}`, `Fecha/Hora: ${(r.fecha||'-')} ${(r.hora||'')}`);
-  addKV(`Propietario: ${r.ownerName || '-'}`, `Tipo: ${r.tipo || '-'}`);
-  addKV(`Área: ${r.area || '-'}`, `Ubicación: ${r.ubicacion || '-'}`);
-  y += 8;
-
-  addSection('Descripción', r.descripcion);
-  addSection('Causas', r.causas);
-  addSection('Acciones / Contención', r.acciones);
-  addSection('Responsable', r.responsable);
-  if (r.compromiso) addSection('Fecha compromiso', r.compromiso);
-  if (r.tags) addSection('Tags', r.tags);
-
-  // Evidencias
-  if (r.fotos && r.fotos.length) {
-    if (y > pageH - margin - 24) { doc.addPage(); y = margin; }
-    doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text('Evidencias', margin, y); y += 14;
-
-    const cellW = (pageW - margin*2 - 20) / 3; // 3 por fila
-    const cellH = 110;
-    for (let i=0;i<r.fotos.length;i++) {
-      if (y > pageH - margin - cellH) { doc.addPage(); y = margin; }
-      const col = i % 3; if (col === 0 && i>0) y += cellH + 20;
-      const x = margin + col * (cellW + 10);
-      const f = r.fotos[i];
-      const dataUrl = await dataURLFromURL(f.url);
-      if (dataUrl) {
-        try { doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST'); } catch {
-          try { doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST'); } catch {}
-        }
-      }
-    }
-    y += cellH + 10;
-  }
-
-  const nombre = (r.folio || `reporte_${Date.now()}`).replace(/[^A-Za-z0-9_\-]/g,'_') + '.pdf';
-  doc.save(nombre);
-}
-
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(null); // {id, username, role}
-  const [authError, setAuthError] = useState("");
-  const [usersExist, setUsersExist] = useState(true);
-
-  const [items, setItems] = useState([]); // lista de reportes
+  const [currentUser, setCurrentUser] = useState(null);
+  const [items, setItems] = useState([]);
   const [onlyMine, setOnlyMine] = useState(false);
-
   const [form, setForm] = useState(emptyReport());
-  const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-
-  // NUEVO: visor de fotos
-  const [viewer, setViewer] = useState({ open: false, index: 0 });
-  const openViewer = (i) => setViewer({ open: true, index: i || 0 });
-  const closeViewer = () => setViewer((v) => ({ ...v, open: false }));
-  const prevPhoto = () => setViewer((v) => {
-    const len = form.fotos?.length || 0; if (!len) return v; return { ...v, index: (v.index - 1 + len) % len };
-  });
-  const nextPhoto = () => setViewer((v) => {
-    const len = form.fotos?.length || 0; if (!len) return v; return { ...v, index: (v.index + 1) % len };
-  });
-  useEffect(()=>{
-    if (!viewer.open) return; const onKey = (e)=>{ if (e.key==='Escape') closeViewer(); if (e.key==='ArrowLeft') prevPhoto(); if (e.key==='ArrowRight') nextPhoto(); };
-    window.addEventListener('keydown', onKey); return ()=>window.removeEventListener('keydown', onKey);
-  }, [viewer.open, form.fotos?.length]);
-
-  const canEdit = useMemo(()=>{
-    if (!currentUser) return false;
-    if (!form._id) return true; // nuevo
-    return currentUser.role === 'admin' || form.ownerId === currentUser.id;
-  }, [currentUser, form._id, form.ownerId]);
+  const [search, setSearch] = useState("");
+  const [filterDate, setFilterDate] = useState("");
+  const [filterYear, setFilterYear] = useState("");
+  const [filterMonth, setFilterMonth] = useState("");
 
   useEffect(()=>{
     if (!currentUser) return;
     (async()=>{
-      const list = await listReports({ owner: currentUser.role==='admin' && !onlyMine ? undefined : 'me' });
+      const list = await listReports({
+        owner: currentUser.role==='admin' && !onlyMine ? undefined : 'me',
+        q: search
+      });
       setItems(list);
     })();
-  }, [currentUser, onlyMine]);
-
-  const handleSetupAdmin = async (u,p) => {
-    try { const user = await authSetupAdmin(u,p); setCurrentUser(user); setAuthError(""); }
-    catch(e) { setAuthError(e.message || 'Error'); setUsersExist(false); }
-  };
-  const handleLogin = async (u,p) => {
-    try { const user = await authLogin(u,p); setCurrentUser(user); setAuthError(""); }
-    catch(e) { setAuthError(e.message || 'Error'); }
-  };
-  const handleRegister = async (u,p) => {
-    try { await authRegister(u,p); const user = await authLogin(u,p); setCurrentUser(user); setAuthError(""); }
-    catch(e) { setAuthError(e.message || 'Error'); }
-  };
-  const handleLogout = async ()=>{ await authLogout(); setCurrentUser(null); setForm(emptyReport()); setItems([]); };
-
-  const validarStep = (s) => {
-    if (s === 1) return Boolean(form.fecha && form.hora);
-    if (s === 2) return Boolean(form.tipo && form.severidad && String(form.descripcion||"").trim().length >= 10);
-    return true;
-  };
+  }, [currentUser, onlyMine, search]);
 
   async function saveReport() {
     if (!currentUser) return;
     setSaving(true);
     try {
-      const payload = { ...form };
-      if (payload.fotos?.length) {
-        const looksLocal = payload.fotos.some((f)=>f.url?.startsWith("data:"));
-        if (looksLocal) {
-          alert("Las fotos locales se omitirán al guardar mientras no esté configurado Cloudinary.");
-          payload.fotos = payload.fotos.filter(f=>!f.url?.startsWith("data:"));
-        }
-      }
-      let saved; if (!form._id) saved = await createReport(payload); else saved = await updateReport(form._id, payload);
+      let saved; if (!form._id) saved = await createReport(form); else saved = await updateReport(form._id, form);
       setForm(saved);
-      const list = await listReports({ owner: currentUser.role==='admin' && !onlyMine ? undefined : 'me' });
+      const list = await listReports({ owner: currentUser.role==='admin' && !onlyMine ? undefined : 'me', q: search });
       setItems(list); alert("Guardado ✔");
-    } catch (e) { console.error(e); alert("No se pudo guardar"); }
+    } catch { alert("No se pudo guardar"); }
     finally { setSaving(false); }
   }
 
-  async function onFilesSelected(list) {
-    if (!list?.length) return; setUploading(true);
-    try {
-      const folder = `desviaciones/${currentUser?.username || 'anon'}`;
-      const sig = await getSignature(folder);
-      if (sig && sig.cloudName && sig.apiKey && sig.signature) {
-        const urls = await uploadToCloudinary(Array.from(list), sig);
-        const fotos = urls.filter(Boolean).map((url)=>({ url, nota: "" }));
-        if (fotos.length) setForm((f)=>({ ...f, fotos: [...(f.fotos||[]), ...fotos] })); else alert("No se pudieron subir las imágenes (Cloudinary)");
-      } else {
-        for (const file of list) {
-          const data = await new Promise((resolve)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.readAsDataURL(file); });
-          setForm((f)=>({ ...f, fotos: [...(f.fotos||[]), { url: String(data), nota: "(local: no se guardará)" }] }));
-        }
-        alert("Cloudinary no está configurado: las fotos se muestran localmente y no se guardarán en la DB.");
+  const filtered = useMemo(()=>{
+    return items.filter(it=>{
+      if (filterDate && it.fecha !== filterDate) return false;
+      if (filterYear && !it.fecha.startsWith(filterYear+"-")) return false;
+      if (filterMonth) {
+        const m = String(filterMonth).padStart(2,"0");
+        if (!it.fecha.slice(5,7).includes(m)) return false;
       }
-    } finally { setUploading(false); }
-  }
-
-  function onLoadReport(it) { setForm(it); setStep(1); }
-  async function onDeleteReport(it) {
-    if (!confirm(`¿Eliminar ${it.folio}?`)) return; await deleteReport(it._id); setForm(emptyReport());
-    const list = await listReports({ owner: currentUser.role==='admin' && !onlyMine ? undefined : 'me' }); setItems(list);
-  }
-
-  const filtered = useMemo(()=> items, [items]);
+      return true;
+    });
+  }, [items, filterDate, filterYear, filterMonth]);
 
   if (!currentUser) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-gray-100 flex items-center">
-        <div className="max-w-4xl w-full mx-auto p-6">
-          <h1 className="text-2xl font-bold text-white mb-4">Reporte de Desviaciones</h1>
-          <LoginScreen
-            usersExist={true}
-            onSetupAdmin={handleSetupAdmin}
-            onLogin={handleLogin}
-            onRegister={handleRegister}
-            error={authError}
-          />
-        </div>
-      </div>
-    );
+    return <div className="text-white p-4">Inicia sesión para continuar…</div>;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-gray-100">
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Reporte de Desviaciones</h1>
-            <p className="text-sm text-gray-400">Conectado a API • {API}</p>
+    <div className="min-h-screen bg-gray-900 text-white p-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-gray-800 rounded-xl p-4">
+          <Campo label="Folio"><TextInput value={form.folio} disabled /></Campo>
+          <Campo label="Reportante"><TextInput value={form.reportante} onChange={(e)=>setForm({...form, reportante:e.target.value})} /></Campo>
+          <Campo label="Fecha"><TextInput type="date" value={form.fecha} onChange={(e)=>setForm({...form, fecha:e.target.value})} /></Campo>
+          <Campo label="Hora"><TextInput type="time" value={form.hora} onChange={(e)=>setForm({...form, hora:e.target.value})} /></Campo>
+          <div className="mt-6">
+            <button onClick={saveReport} disabled={saving} className="px-4 py-2 bg-emerald-600 rounded">{saving? "Guardando…":"Guardar"}</button>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="text-sm text-gray-300 bg-gray-800/60 border border-gray-700 rounded-xl px-3 py-2">
-              Sesión: <span className="font-semibold text-white">{currentUser.username}</span> <span className="text-xs text-gray-400">({currentUser.role==='admin'?'superusuario':'usuario'})</span>
-            </div>
-            <button onClick={handleLogout} className="px-3 py-2 rounded-xl bg-gray-700 hover:bg-gray-600 text-white text-sm shadow">Cerrar sesión</button>
-          </div>
-        </header>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Formulario */}
-          <div className="lg:col-span-2 bg-gray-900/60 border border-gray-800 rounded-2xl p-5">
-            <div className="flex items-center gap-3 mb-5">
-              {steps.map((s,i)=>{
-                const active = step===s.id; const done = s.id<step;
-                return (
-                  <div key={s.id} className="flex items-center gap-2">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border ${active? 'bg-white text-gray-900 border-white': done? 'bg-green-600 text-white border-green-600':'bg-gray-700 text-gray-200 border-gray-600'}`}>{done? '✓': s.id}</div>
-                    <div className={`text-sm ${active? 'text-white':'text-gray-300'}`}>{s.title}</div>
-                    {i<steps.length-1 && <div className="w-8 h-px bg-gray-600 mx-2"/>}
-                  </div>
-                );
-              })}
-            </div>
-
-            {step===1 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Campo label="Folio"><TextInput value={form.folio} onChange={(e)=>canEdit && setForm({...form, folio:e.target.value})} disabled={!canEdit} /></Campo>
-                <Campo label="Reportante"><TextInput value={form.reportante} onChange={(e)=>canEdit && setForm({...form, reportante:e.target.value})} disabled={!canEdit} /></Campo>
-                <Campo label="Fecha" required><TextInput type="date" value={form.fecha} onChange={(e)=>canEdit && setForm({...form, fecha:e.target.value})} disabled={!canEdit} /></Campo>
-                <Campo label="Hora" required><TextInput type="time" value={form.hora} onChange={(e)=>canEdit && setForm({...form, hora:e.target.value})} disabled={!canEdit} /></Campo>
-                <Campo label="Área"><Select value={form.area} onChange={(e)=>canEdit && setForm({...form, area:e.target.value})} disabled={!canEdit}><option value="">Seleccione área…</option>{AREAS.map(a=> <option key={a} value={a}>{a}</option>)}</Select></Campo>
-                <Campo label="Ubicación específica"><TextInput value={form.ubicacion} onChange={(e)=>canEdit && setForm({...form, ubicacion:e.target.value})} disabled={!canEdit} /></Campo>
-              </div>
-            )}
-
-            {step===2 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Campo label="Tipo" required><Select value={form.tipo} onChange={(e)=>canEdit && setForm({...form, tipo:e.target.value})} disabled={!canEdit}>{TIPOS.map(t=> <option key={t} value={t}>{t}</option>)}</Select></Campo>
-                <Campo label="Severidad" required><Select value={form.severidad} onChange={(e)=>canEdit && setForm({...form, severidad:e.target.value})} disabled={!canEdit}>{SEVERIDADES.map(s=> <option key={s} value={s}>{s}</option>)}</Select></Campo>
-                <div className="md:col-span-2"><Campo label="Descripción (≥10)" required><TextArea value={form.descripcion} onChange={(e)=>canEdit && setForm({...form, descripcion:e.target.value})} disabled={!canEdit} placeholder="Describe la desviación…"/></Campo></div>
-                <div className="md:col-span-2"><Campo label="Causas"><TextArea value={form.causas} onChange={(e)=>canEdit && setForm({...form, causas:e.target.value})} disabled={!canEdit} /></Campo></div>
-                <div className="md:col-span-2"><Campo label="Tags"><TextInput value={form.tags} onChange={(e)=>canEdit && setForm({...form, tags:e.target.value})} disabled={!canEdit} /></Campo></div>
-              </div>
-            )}
-
-            {step===3 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2"><Campo label="Acciones / contención"><TextArea value={form.acciones} onChange={(e)=>canEdit && setForm({...form, acciones:e.target.value})} disabled={!canEdit} /></Campo></div>
-                <Campo label="Responsable"><TextInput value={form.responsable} onChange={(e)=>canEdit && setForm({...form, responsable:e.target.value})} disabled={!canEdit} /></Campo>
-                <Campo label="Fecha compromiso"><TextInput type="date" value={form.compromiso||""} onChange={(e)=>canEdit && setForm({...form, compromiso:e.target.value})} disabled={!canEdit} /></Campo>
-              </div>
-            )}
-
-            {step===4 && (
-              <div>
-                <div className={`border-2 border-dashed rounded-2xl p-6 text-center ${canEdit? 'border-gray-700 bg-gray-900/40':'border-gray-800 bg-gray-900/20'}`}>
-                  <p className="text-sm text-gray-300">Selecciona imágenes (sube a Cloudinary si está configurado)</p>
-                  <div className="mt-2">
-                    <label className={`inline-block cursor-pointer px-4 py-2 rounded-xl text-white text-sm ${canEdit? 'bg-gray-700 hover:bg-gray-600':'bg-gray-700/60 cursor-not-allowed'}`}>
-                      Elegir imágenes
-                      <input type="file" accept="image/*" multiple className="hidden" disabled={!canEdit} onChange={(e)=>onFilesSelected(e.target.files)} />
-                    </label>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">Si Cloudinary no está configurado, solo se verán localmente y no se guardarán.</p>
-                </div>
-
-                {form.fotos?.length>0 && (
-                  <div className="mt-4">
-                    <FotosGrid fotos={form.fotos} uploading={uploading} onNota={(i,nota)=>setForm(f=>{ const arr=[...(f.fotos||[])]; arr[i]={...arr[i], nota}; return {...f, fotos:arr}; })} onRemove={(i)=>setForm(f=>({ ...f, fotos: (f.fotos||[]).filter((_,idx)=>idx!==i) }))} canEdit={canEdit} onPreview={openViewer} />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {step===5 && (
-              <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-white font-semibold">Resumen</h3>
-                  <div className="flex items-center gap-2">
-                    <Badge color={{'Baja':'bg-emerald-600','Media':'bg-amber-500','Alta':'bg-orange-600','Crítica':'bg-red-600'}[form.severidad]||'bg-indigo-600'}>{form.severidad}</Badge>
-                    <button onClick={()=>exportReportPDF(form)} className="px-3 py-1.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs">Exportar PDF</button>
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Folio</div><div className="text-white font-medium">{form.folio}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Fecha/Hora</div><div className="text-white font-medium">{form.fecha} {form.hora}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Propietario</div><div className="text-white font-medium">{form.ownerName||'—'}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Área/Ubicación</div><div className="text-white font-medium">{form.area||'—'} {form.ubicacion? `• ${form.ubicacion}`:''}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Tipo</div><div className="text-white font-medium">{form.tipo}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Tags</div><div className="text-white font-medium">{form.tags||'—'}</div></div>
-                </div>
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400 text-sm mb-1">Descripción</div><div className="text-gray-100 whitespace-pre-wrap">{form.descripcion||'—'}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400 text-sm mb-1">Causas</div><div className="text-gray-100 whitespace-pre-wrap">{form.causas||'—'}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400 text-sm mb-1">Acciones</div><div className="text-gray-100 whitespace-pre-wrap">{form.acciones||'—'}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400 text-sm mb-1">Responsable/Compromiso</div><div className="text-gray-100 whitespace-pre-wrap">{(form.responsable||'—')+(form.compromiso? `
-Fecha compromiso: ${form.compromiso}`:'')}</div></div>
-                </div>
-                {form.fotos?.length>0 && (
-                  <div className="mt-4">
-                    <div className="text-white font-semibold mb-2">Evidencias</div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                      {form.fotos.map((f,i)=> (
-                        <figure key={i} className="bg-gray-800/60 rounded-xl overflow-hidden border border-gray-700">
-                          <img src={f.url} alt={`Foto ${i+1}`} onClick={()=>openViewer(i)} className="w-full h-40 object-cover cursor-zoom-in" />
-                          {f.nota && <figcaption className="text-xs text-gray-300 p-2">{f.nota}</figcaption>}
-                        </figure>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="mt-6 flex items-center justify-between">
-              <button onClick={()=>setStep(s=>Math.max(1,s-1))} disabled={step===1} className={`px-4 py-2 rounded-xl text-sm ${step===1? 'bg-gray-700/60 text-gray-400 cursor-not-allowed':'bg-gray-700 hover:bg-gray-600 text-white'}`}>Atrás</button>
-              <div className="flex items-center gap-2">
-                {step<5 && <button onClick={()=>setStep(s=>Math.min(5,s+1))} disabled={!validarStep(step)} className={`px-4 py-2 rounded-xl text-sm ${!validarStep(step)? 'bg-indigo-600/50 text-white/70 cursor-not-allowed':'bg-indigo-600 hover:bg-indigo-500 text-white'}`}>Siguiente</button>}
-                {step===5 && <button disabled={!canEdit||saving} onClick={saveReport} className={`px-4 py-2 rounded-xl text-sm ${!canEdit? 'bg-gray-600/60 cursor-not-allowed text-white/70':'bg-emerald-600 hover:bg-emerald-500 text-white'}`}>{saving? 'Guardando…':'Guardar'}</button>}
-              </div>
-            </div>
-          </div>
-
-          {/* Listado */}
-          <aside className="space-y-6">
-            <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-white">Reportes</h3>
-                <label className="text-xs text-gray-300 inline-flex items-center gap-1">
-                  <input type="checkbox" className="accent-indigo-600" checked={onlyMine} onChange={(e)=>setOnlyMine(e.target.checked)} /> Solo míos
-                </label>
-              </div>
-              <div className="mt-2 max-h-[420px] overflow-auto pr-1 space-y-2">
-                {filtered.map((it)=> (
-                  <div key={it._id} className="bg-gray-800/60 border border-gray-700 rounded-xl p-3 flex items-start gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2"><span className="text-white font-semibold text-sm">{it.folio}</span><Badge>{it.severidad}</Badge></div>
-                      <div className="text-xs text-gray-300 mt-1 flex flex-wrap gap-2"><span>{it.fecha} {it.hora}</span><span>• {it.tipo}</span><span>• {it.area||'(sin área)'}</span><span>• {it.ownerName||'—'}</span></div>
-                      <div className="text-xs text-gray-400 line-clamp-2 mt-1">{it.descripcion}</div>
-                    </div>
-                    <div className="flex flex-col gap-2 w-28">
-                      <button onClick={()=>onLoadReport(it)} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-1">Abrir</button>
-                      <button onClick={()=>onDeleteReport(it)} disabled={!(currentUser.role==='admin' || it.ownerId===currentUser.id)} className="text-xs bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white rounded-lg py-1">Eliminar</button>
-                    </div>
-                  </div>
-                ))}
-                {filtered.length===0 && <div className="text-sm text-gray-400">No hay resultados.</div>}
-              </div>
-            </div>
-
-            <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
-              <h3 className="text-sm font-semibold text-white mb-2">Consejos</h3>
-              <ul className="list-disc pl-5 text-xs text-gray-300 space-y-1">
-                <li>Click en una foto para ampliarla. Usa ← → o los botones para navegar. Cierra con × (arriba izquierda) o Esc.</li>
-                <li>El token de acceso se renueva con cookie httpOnly (no verás el refresh).</li>
-                <li>Solo el propietario edita su reporte; admin edita todo.</li>
-                <li>Para fotos reales, configura Cloudinary en el backend.</li>
-                <li>Usa "Exportar PDF" en el Paso 5 para descargar el reporte con fotos.</li>
-              </ul>
-            </div>
-          </aside>
         </div>
-      </div>
 
-      {/* Visor modal */}
-      {viewer.open && (
-        <Lightbox
-          photos={form.fotos}
-          index={viewer.index}
-          onClose={closeViewer}
-          onPrev={prevPhoto}
-          onNext={nextPhoto}
-        />
-      )}
+        <aside className="space-y-4">
+          <div className="bg-gray-800 rounded-xl p-4">
+            <input type="text" placeholder="Buscar..." value={search} onChange={(e)=>setSearch(e.target.value)} className="w-full mb-3 px-3 py-2 rounded bg-gray-700" />
+            <div className="flex gap-2 mb-3">
+              <input type="date" value={filterDate} onChange={(e)=>setFilterDate(e.target.value)} className="bg-gray-700 px-2 py-1 rounded"/>
+              <input type="number" min="2020" max="2100" placeholder="Año" value={filterYear} onChange={(e)=>setFilterYear(e.target.value)} className="bg-gray-700 px-2 py-1 rounded w-20"/>
+              <select value={filterMonth} onChange={(e)=>setFilterMonth(e.target.value)} className="bg-gray-700 px-2 py-1 rounded">
+                <option value="">Mes</option>
+                {Array.from({length:12},(_,i)=>(<option key={i+1} value={i+1}>{i+1}</option>))}
+              </select>
+            </div>
+            <div className="max-h-[420px] overflow-auto space-y-2">
+              {filtered.map((it)=>(
+                <div key={it._id} className="bg-gray-700 rounded p-2">
+                  <div className="font-semibold">{it.folio}</div>
+                  <div className="text-xs">{it.fecha} {it.hora} • {it.tipo} • {it.area}</div>
+                  <div className="text-xs text-gray-300">{it.descripcion}</div>
+                </div>
+              ))}
+              {filtered.length===0 && <div className="text-sm text-gray-400">No hay resultados.</div>}
+            </div>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
