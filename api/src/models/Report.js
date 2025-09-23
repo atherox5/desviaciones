@@ -1,28 +1,40 @@
 import mongoose from 'mongoose';
 
-const fotoSchema = new mongoose.Schema({
-  url: String,
-  nota: String,
-}, { _id: false });
+const FotoSchema = new mongoose.Schema(
+  { url: { type: String, required: true }, nota: { type: String, default: '' } },
+  { _id: false }
+);
 
-const reportSchema = new mongoose.Schema({
-  folio: { type: String, unique: true, index: true },
-  fecha: String,
-  hora: String,
-  reportante: String,
-  area: String,
-  ubicacion: String,
-  tipo: String,
-  severidad: String,
-  descripcion: String,
-  causas: String,
-  acciones: String,
-  responsable: String,
-  compromiso: String,
-  tags: String,
-  fotos: [fotoSchema],
-  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
-  ownerName: String,
-}, { timestamps: true });
+const ReportSchema = new mongoose.Schema(
+  {
+    folio: { type: String, required: true, unique: true, immutable: true }, // <- inmutable
+    fecha: { type: String, required: true },   // "YYYY-MM-DD"
+    hora: { type: String, required: true },    // "HH:mm"
+    reportante: { type: String, default: '' },
+    area: { type: String, default: '' },
+    ubicacion: { type: String, default: '' },
+    tipo: { type: String, required: true },
+    severidad: { type: String, required: true },
+    descripcion: { type: String, required: true },
+    causas: { type: String, default: '' },
+    acciones: { type: String, default: '' },
+    responsable: { type: String, default: '' },
+    compromiso: { type: String, default: '' },
+    tags: { type: String, default: '' },
+    fotos: { type: [FotoSchema], default: [] },
+    status: {                                  // <- estado del flujo
+      type: String,
+      enum: ['pendiente', 'tratamiento', 'concluido'],
+      default: 'pendiente',
+      index: true
+    },
+    ownerId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
+    ownerName: { type: String, required: true }
+  },
+  { timestamps: true }
+);
 
-export default mongoose.model('Report', reportSchema);
+ReportSchema.index({ folio: 1 }, { unique: true });
+ReportSchema.index({ createdAt: -1 });
+
+export default mongoose.model('Report', ReportSchema);

@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from "react-router-dom";
+import Dashboard from "./pages/Dashboard.jsx";
 
 // ==============================================
 // Frontend conectado a API + Exportar a PDF + Visor de Fotos (modal)
@@ -171,7 +173,6 @@ function Lightbox({ photos, index, onClose, onPrev, onNext }) {
     </div>
   );
 }
-
 function FotosGrid({ fotos, uploading, onNota, onRemove, canEdit, onPreview }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -305,7 +306,7 @@ async function exportReportPDF(r) {
   doc.save(nombre);
 }
 
-export default function App() {
+function AppInner() {
   const [currentUser, setCurrentUser] = useState(null); // {id, username, role}
   const [authError, setAuthError] = useState("");
   const [usersExist, setUsersExist] = useState(true);
@@ -317,6 +318,19 @@ export default function App() {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const redirectToDashboard = () => {
+    if (location.pathname !== "/dashboard") navigate("/dashboard", { replace: true });
+  };
+  const navLinkClass = ({ isActive }) =>
+    `px-3 py-2 rounded-xl text-sm transition ${
+      isActive
+        ? "bg-indigo-600 text-white shadow"
+        : "bg-gray-800/70 text-gray-200 hover:bg-gray-700/80"
+    }`;
 
   // NUEVO: visor de fotos
   const [viewer, setViewer] = useState({ open: false, index: 0 });
@@ -332,6 +346,11 @@ export default function App() {
     if (!viewer.open) return; const onKey = (e)=>{ if (e.key==='Escape') closeViewer(); if (e.key==='ArrowLeft') prevPhoto(); if (e.key==='ArrowRight') nextPhoto(); };
     window.addEventListener('keydown', onKey); return ()=>window.removeEventListener('keydown', onKey);
   }, [viewer.open, form.fotos?.length]);
+  useEffect(()=>{
+    if (location.pathname !== '/' && viewer.open) {
+      setViewer((v)=>({ ...v, open: false }));
+    }
+  }, [location.pathname, viewer.open]);
 
   const canEdit = useMemo(()=>{
     if (!currentUser) return false;
@@ -348,18 +367,44 @@ export default function App() {
   }, [currentUser, onlyMine]);
 
   const handleSetupAdmin = async (u,p) => {
-    try { const user = await authSetupAdmin(u,p); setCurrentUser(user); setAuthError(""); }
-    catch(e) { setAuthError(e.message || 'Error'); setUsersExist(false); }
+    try {
+      const user = await authSetupAdmin(u,p);
+      setCurrentUser(user);
+      setAuthError("");
+      redirectToDashboard();
+    } catch(e) {
+      setAuthError(e.message || 'Error');
+      setUsersExist(false);
+    }
   };
   const handleLogin = async (u,p) => {
-    try { const user = await authLogin(u,p); setCurrentUser(user); setAuthError(""); }
-    catch(e) { setAuthError(e.message || 'Error'); }
+    try {
+      const user = await authLogin(u,p);
+      setCurrentUser(user);
+      setAuthError("");
+      redirectToDashboard();
+    } catch(e) {
+      setAuthError(e.message || 'Error');
+    }
   };
   const handleRegister = async (u,p) => {
-    try { await authRegister(u,p); const user = await authLogin(u,p); setCurrentUser(user); setAuthError(""); }
-    catch(e) { setAuthError(e.message || 'Error'); }
+    try {
+      await authRegister(u,p);
+      const user = await authLogin(u,p);
+      setCurrentUser(user);
+      setAuthError("");
+      redirectToDashboard();
+    } catch(e) {
+      setAuthError(e.message || 'Error');
+    }
   };
-  const handleLogout = async ()=>{ await authLogout(); setCurrentUser(null); setForm(emptyReport()); setItems([]); };
+  const handleLogout = async ()=>{
+    await authLogout();
+    setCurrentUser(null);
+    setForm(emptyReport());
+    setItems([]);
+    if (location.pathname !== "/") navigate("/", { replace: true });
+  };
 
   const validarStep = (s) => {
     if (s === 1) return Boolean(form.fecha && form.hora);
@@ -420,7 +465,7 @@ export default function App() {
         <div className="max-w-4xl w-full mx-auto p-6">
           <h1 className="text-2xl font-bold text-white mb-4">Reporte de Desviaciones</h1>
           <LoginScreen
-            usersExist={true}
+            usersExist={usersExist}
             onSetupAdmin={handleSetupAdmin}
             onLogin={handleLogin}
             onRegister={handleRegister}
@@ -431,13 +476,176 @@ export default function App() {
     );
   }
 
+  const reportPage = (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Formulario */}
+      <div className="lg:col-span-2 bg-gray-900/60 border border-gray-800 rounded-2xl p-5">
+        <div className="flex items-center gap-3 mb-5">
+          {steps.map((s,i)=>{
+            const active = step===s.id; const done = s.id<step;
+            return (
+              <div key={s.id} className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border ${active? 'bg-white text-gray-900 border-white': done? 'bg-green-600 text-white border-green-600':'bg-gray-700 text-gray-200 border-gray-600'}`}>{done? '✓': s.id}</div>
+                <div className={`text-sm ${active? 'text-white':'text-gray-300'}`}>{s.title}</div>
+                {i<steps.length-1 && <div className="w-8 h-px bg-gray-600 mx-2"/>}
+              </div>
+            );
+          })}
+        </div>
+
+        {step===1 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Campo label="Folio"><TextInput value={form.folio} onChange={(e)=>canEdit && setForm({...form, folio:e.target.value})} disabled={!canEdit} /></Campo>
+            <Campo label="Reportante"><TextInput value={form.reportante} onChange={(e)=>canEdit && setForm({...form, reportante:e.target.value})} disabled={!canEdit} /></Campo>
+            <Campo label="Fecha" required><TextInput type="date" value={form.fecha} onChange={(e)=>canEdit && setForm({...form, fecha:e.target.value})} disabled={!canEdit} /></Campo>
+            <Campo label="Hora" required><TextInput type="time" value={form.hora} onChange={(e)=>canEdit && setForm({...form, hora:e.target.value})} disabled={!canEdit} /></Campo>
+            <Campo label="Área"><Select value={form.area} onChange={(e)=>canEdit && setForm({...form, area:e.target.value})} disabled={!canEdit}><option value="">Seleccione área…</option>{AREAS.map(a=> <option key={a} value={a}>{a}</option>)}</Select></Campo>
+            <Campo label="Ubicación específica"><TextInput value={form.ubicacion} onChange={(e)=>canEdit && setForm({...form, ubicacion:e.target.value})} disabled={!canEdit} /></Campo>
+          </div>
+        )}
+
+        {step===2 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Campo label="Tipo" required><Select value={form.tipo} onChange={(e)=>canEdit && setForm({...form, tipo:e.target.value})} disabled={!canEdit}>{TIPOS.map(t=> <option key={t} value={t}>{t}</option>)}</Select></Campo>
+            <Campo label="Severidad" required><Select value={form.severidad} onChange={(e)=>canEdit && setForm({...form, severidad:e.target.value})} disabled={!canEdit}>{SEVERIDADES.map(s=> <option key={s} value={s}>{s}</option>)}</Select></Campo>
+            <div className="md:col-span-2"><Campo label="Descripción (≥10)" required><TextArea value={form.descripcion} onChange={(e)=>canEdit && setForm({...form, descripcion:e.target.value})} disabled={!canEdit} placeholder="Describe la desviación…"/></Campo></div>
+            <div className="md:col-span-2"><Campo label="Causas"><TextArea value={form.causas} onChange={(e)=>canEdit && setForm({...form, causas:e.target.value})} disabled={!canEdit} /></Campo></div>
+            <div className="md:col-span-2"><Campo label="Tags"><TextInput value={form.tags} onChange={(e)=>canEdit && setForm({...form, tags:e.target.value})} disabled={!canEdit} /></Campo></div>
+          </div>
+        )}
+
+        {step===3 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2"><Campo label="Acciones / contención"><TextArea value={form.acciones} onChange={(e)=>canEdit && setForm({...form, acciones:e.target.value})} disabled={!canEdit} /></Campo></div>
+            <Campo label="Responsable"><TextInput value={form.responsable} onChange={(e)=>canEdit && setForm({...form, responsable:e.target.value})} disabled={!canEdit} /></Campo>
+            <Campo label="Fecha compromiso"><TextInput type="date" value={form.compromiso||""} onChange={(e)=>canEdit && setForm({...form, compromiso:e.target.value})} disabled={!canEdit} /></Campo>
+          </div>
+        )}
+
+        {step===4 && (
+          <div>
+            <div className={`border-2 border-dashed rounded-2xl p-6 text-center ${canEdit? 'border-gray-700 bg-gray-900/40':'border-gray-800 bg-gray-900/20'}`}>
+              <p className="text-sm text-gray-300">Selecciona imágenes (sube a Cloudinary si está configurado)</p>
+              <div className="mt-2">
+                <label className={`inline-block cursor-pointer px-4 py-2 rounded-xl text-white text-sm ${canEdit? 'bg-gray-700 hover:bg-gray-600':'bg-gray-700/60 cursor-not-allowed'}`}>
+                  Elegir imágenes
+                  <input type="file" accept="image/*" multiple className="hidden" disabled={!canEdit} onChange={(e)=>onFilesSelected(e.target.files)} />
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">Si Cloudinary no está configurado, solo se verán localmente y no se guardarán.</p>
+            </div>
+
+            {form.fotos?.length>0 && (
+              <div className="mt-4">
+                <FotosGrid fotos={form.fotos} uploading={uploading} onNota={(i,nota)=>setForm(f=>{ const arr=[...(f.fotos||[])]; arr[i]={...arr[i], nota}; return {...f, fotos:arr}; })} onRemove={(i)=>setForm(f=>({ ...f, fotos: (f.fotos||[]).filter((_,idx)=>idx!==i) }))} canEdit={canEdit} onPreview={openViewer} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {step===5 && (
+          <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-white font-semibold">Resumen</h3>
+              <div className="flex items-center gap-2">
+                <Badge color={{'Baja':'bg-emerald-600','Media':'bg-amber-500','Alta':'bg-orange-600','Crítica':'bg-red-600'}[form.severidad]||'bg-indigo-600'}>{form.severidad}</Badge>
+                <button onClick={()=>exportReportPDF(form)} className="px-3 py-1.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs">Exportar PDF</button>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Folio</div><div className="text-white font-medium">{form.folio}</div></div>
+              <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Fecha/Hora</div><div className="text-white font-medium">{form.fecha} {form.hora}</div></div>
+              <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Propietario</div><div className="text-white font-medium">{form.ownerName||'—'}</div></div>
+              <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Área/Ubicación</div><div className="text-white font-medium">{form.area||'—'} {form.ubicacion? `• ${form.ubicacion}`:''}</div></div>
+              <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Tipo</div><div className="text-white font-medium">{form.tipo}</div></div>
+              <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Tags</div><div className="text-white font-medium">{form.tags||'—'}</div></div>
+            </div>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400 text-sm mb-1">Descripción</div><div className="text-gray-100 whitespace-pre-wrap">{form.descripcion||'—'}</div></div>
+              <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400 text-sm mb-1">Causas</div><div className="text-gray-100 whitespace-pre-wrap">{form.causas||'—'}</div></div>
+              <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400 text-sm mb-1">Acciones</div><div className="text-gray-100 whitespace-pre-wrap">{form.acciones||'—'}</div></div>
+              <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400 text-sm mb-1">Responsable/Compromiso</div><div className="text-gray-100 whitespace-pre-wrap">{(form.responsable||'—')+(form.compromiso? `
+Fecha compromiso: ${form.compromiso}`:'')}</div></div>
+            </div>
+            {form.fotos?.length>0 && (
+              <div className="mt-4">
+                <div className="text-white font-semibold mb-2">Evidencias</div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {form.fotos.map((f,i)=> (
+                    <figure key={i} className="bg-gray-800/60 rounded-xl overflow-hidden border border-gray-700">
+                      <img src={f.url} alt={`Foto ${i+1}`} onClick={()=>openViewer(i)} className="w-full h-40 object-cover cursor-zoom-in" />
+                      {f.nota && <figcaption className="text-xs text-gray-300 p-2">{f.nota}</figcaption>}
+                    </figure>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-6 flex items-center justify-between">
+          <button onClick={()=>setStep(s=>Math.max(1,s-1))} disabled={step===1} className={`px-4 py-2 rounded-xl text-sm ${step===1? 'bg-gray-700/60 text-gray-400 cursor-not-allowed':'bg-gray-700 hover:bg-gray-600 text-white'}`}>Atrás</button>
+          <div className="flex items-center gap-2">
+            {step<5 && <button onClick={()=>setStep(s=>Math.min(5,s+1))} disabled={!validarStep(step)} className={`px-4 py-2 rounded-xl text-sm ${!validarStep(step)? 'bg-indigo-600/50 text-white/70 cursor-not-allowed':'bg-indigo-600 hover:bg-indigo-500 text-white'}`}>Siguiente</button>}
+            {step===5 && <button disabled={!canEdit||saving} onClick={saveReport} className={`px-4 py-2 rounded-xl text-sm ${!canEdit? 'bg-gray-600/60 cursor-not-allowed text-white/70':'bg-emerald-600 hover:bg-emerald-500 text-white'}`}>{saving? 'Guardando…':'Guardar'}</button>}
+          </div>
+        </div>
+      </div>
+
+      {/* Listado */}
+      <aside className="space-y-6">
+        <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-white">Reportes</h3>
+            <label className="text-xs text-gray-300 inline-flex items-center gap-1">
+              <input type="checkbox" className="accent-indigo-600" checked={onlyMine} onChange={(e)=>setOnlyMine(e.target.checked)} /> Solo míos
+            </label>
+          </div>
+          <div className="mt-2 max-h-[420px] overflow-auto pr-1 space-y-2">
+            {filtered.map((it)=> (
+              <div key={it._id} className="bg-gray-800/60 border border-gray-700 rounded-xl p-3 flex items-start gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2"><span className="text-white font-semibold text-sm">{it.folio}</span><Badge>{it.severidad}</Badge></div>
+                  <div className="text-xs text-gray-300 mt-1 flex flex-wrap gap-2"><span>{it.fecha} {it.hora}</span><span>• {it.tipo}</span><span>• {it.area||'(sin área)'}</span><span>• {it.ownerName||'—'}</span></div>
+                  <div className="text-xs text-gray-400 line-clamp-2 mt-1">{it.descripcion}</div>
+                </div>
+                <div className="flex flex-col gap-2 w-28">
+                  <button onClick={()=>onLoadReport(it)} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-1">Abrir</button>
+                  <button onClick={()=>onDeleteReport(it)} disabled={!(currentUser.role==='admin' || it.ownerId===currentUser.id)} className="text-xs bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white rounded-lg py-1">Eliminar</button>
+                </div>
+              </div>
+            ))}
+            {filtered.length===0 && <div className="text-sm text-gray-400">No hay resultados.</div>}
+          </div>
+        </div>
+
+        <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
+          <h3 className="text-sm font-semibold text-white mb-2">Consejos</h3>
+          <ul className="list-disc pl-5 text-xs text-gray-300 space-y-1">
+            <li>Click en una foto para ampliarla. Usa ← → o los botones para navegar. Cierra con × (arriba izquierda) o Esc.</li>
+            <li>El token de acceso se renueva con cookie httpOnly (no verás el refresh).</li>
+            <li>Solo el propietario edita su reporte; admin edita todo.</li>
+            <li>Para fotos reales, configura Cloudinary en el backend.</li>
+            <li>Usa "Exportar PDF" en el Paso 5 para descargar el reporte con fotos.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-gray-100">
       <div className="max-w-7xl mx-auto px-4 py-6">
         <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Reporte de Desviaciones</h1>
-            <p className="text-sm text-gray-400">Conectado a API • {API}</p>
+          <div className="space-y-3">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Reporte de Desviaciones</h1>
+              <p className="text-sm text-gray-400">Conectado a API • {API}</p>
+            </div>
+            <nav className="flex flex-wrap gap-2">
+              <NavLink to="/" className={navLinkClass}>Reportes</NavLink>
+              <NavLink to="/dashboard" className={navLinkClass}>Dashboard</NavLink>
+            </nav>
           </div>
           <div className="flex items-center gap-2">
             <div className="text-sm text-gray-300 bg-gray-800/60 border border-gray-700 rounded-xl px-3 py-2">
@@ -447,164 +655,14 @@ export default function App() {
           </div>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Formulario */}
-          <div className="lg:col-span-2 bg-gray-900/60 border border-gray-800 rounded-2xl p-5">
-            <div className="flex items-center gap-3 mb-5">
-              {steps.map((s,i)=>{
-                const active = step===s.id; const done = s.id<step;
-                return (
-                  <div key={s.id} className="flex items-center gap-2">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border ${active? 'bg-white text-gray-900 border-white': done? 'bg-green-600 text-white border-green-600':'bg-gray-700 text-gray-200 border-gray-600'}`}>{done? '✓': s.id}</div>
-                    <div className={`text-sm ${active? 'text-white':'text-gray-300'}`}>{s.title}</div>
-                    {i<steps.length-1 && <div className="w-8 h-px bg-gray-600 mx-2"/>}
-                  </div>
-                );
-              })}
-            </div>
-
-            {step===1 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Campo label="Folio"><TextInput value={form.folio} onChange={(e)=>canEdit && setForm({...form, folio:e.target.value})} disabled={!canEdit} /></Campo>
-                <Campo label="Reportante"><TextInput value={form.reportante} onChange={(e)=>canEdit && setForm({...form, reportante:e.target.value})} disabled={!canEdit} /></Campo>
-                <Campo label="Fecha" required><TextInput type="date" value={form.fecha} onChange={(e)=>canEdit && setForm({...form, fecha:e.target.value})} disabled={!canEdit} /></Campo>
-                <Campo label="Hora" required><TextInput type="time" value={form.hora} onChange={(e)=>canEdit && setForm({...form, hora:e.target.value})} disabled={!canEdit} /></Campo>
-                <Campo label="Área"><Select value={form.area} onChange={(e)=>canEdit && setForm({...form, area:e.target.value})} disabled={!canEdit}><option value="">Seleccione área…</option>{AREAS.map(a=> <option key={a} value={a}>{a}</option>)}</Select></Campo>
-                <Campo label="Ubicación específica"><TextInput value={form.ubicacion} onChange={(e)=>canEdit && setForm({...form, ubicacion:e.target.value})} disabled={!canEdit} /></Campo>
-              </div>
-            )}
-
-            {step===2 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Campo label="Tipo" required><Select value={form.tipo} onChange={(e)=>canEdit && setForm({...form, tipo:e.target.value})} disabled={!canEdit}>{TIPOS.map(t=> <option key={t} value={t}>{t}</option>)}</Select></Campo>
-                <Campo label="Severidad" required><Select value={form.severidad} onChange={(e)=>canEdit && setForm({...form, severidad:e.target.value})} disabled={!canEdit}>{SEVERIDADES.map(s=> <option key={s} value={s}>{s}</option>)}</Select></Campo>
-                <div className="md:col-span-2"><Campo label="Descripción (≥10)" required><TextArea value={form.descripcion} onChange={(e)=>canEdit && setForm({...form, descripcion:e.target.value})} disabled={!canEdit} placeholder="Describe la desviación…"/></Campo></div>
-                <div className="md:col-span-2"><Campo label="Causas"><TextArea value={form.causas} onChange={(e)=>canEdit && setForm({...form, causas:e.target.value})} disabled={!canEdit} /></Campo></div>
-                <div className="md:col-span-2"><Campo label="Tags"><TextInput value={form.tags} onChange={(e)=>canEdit && setForm({...form, tags:e.target.value})} disabled={!canEdit} /></Campo></div>
-              </div>
-            )}
-
-            {step===3 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2"><Campo label="Acciones / contención"><TextArea value={form.acciones} onChange={(e)=>canEdit && setForm({...form, acciones:e.target.value})} disabled={!canEdit} /></Campo></div>
-                <Campo label="Responsable"><TextInput value={form.responsable} onChange={(e)=>canEdit && setForm({...form, responsable:e.target.value})} disabled={!canEdit} /></Campo>
-                <Campo label="Fecha compromiso"><TextInput type="date" value={form.compromiso||""} onChange={(e)=>canEdit && setForm({...form, compromiso:e.target.value})} disabled={!canEdit} /></Campo>
-              </div>
-            )}
-
-            {step===4 && (
-              <div>
-                <div className={`border-2 border-dashed rounded-2xl p-6 text-center ${canEdit? 'border-gray-700 bg-gray-900/40':'border-gray-800 bg-gray-900/20'}`}>
-                  <p className="text-sm text-gray-300">Selecciona imágenes (sube a Cloudinary si está configurado)</p>
-                  <div className="mt-2">
-                    <label className={`inline-block cursor-pointer px-4 py-2 rounded-xl text-white text-sm ${canEdit? 'bg-gray-700 hover:bg-gray-600':'bg-gray-700/60 cursor-not-allowed'}`}>
-                      Elegir imágenes
-                      <input type="file" accept="image/*" multiple className="hidden" disabled={!canEdit} onChange={(e)=>onFilesSelected(e.target.files)} />
-                    </label>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">Si Cloudinary no está configurado, solo se verán localmente y no se guardarán.</p>
-                </div>
-
-                {form.fotos?.length>0 && (
-                  <div className="mt-4">
-                    <FotosGrid fotos={form.fotos} uploading={uploading} onNota={(i,nota)=>setForm(f=>{ const arr=[...(f.fotos||[])]; arr[i]={...arr[i], nota}; return {...f, fotos:arr}; })} onRemove={(i)=>setForm(f=>({ ...f, fotos: (f.fotos||[]).filter((_,idx)=>idx!==i) }))} canEdit={canEdit} onPreview={openViewer} />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {step===5 && (
-              <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-white font-semibold">Resumen</h3>
-                  <div className="flex items-center gap-2">
-                    <Badge color={{'Baja':'bg-emerald-600','Media':'bg-amber-500','Alta':'bg-orange-600','Crítica':'bg-red-600'}[form.severidad]||'bg-indigo-600'}>{form.severidad}</Badge>
-                    <button onClick={()=>exportReportPDF(form)} className="px-3 py-1.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs">Exportar PDF</button>
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Folio</div><div className="text-white font-medium">{form.folio}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Fecha/Hora</div><div className="text-white font-medium">{form.fecha} {form.hora}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Propietario</div><div className="text-white font-medium">{form.ownerName||'—'}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Área/Ubicación</div><div className="text-white font-medium">{form.area||'—'} {form.ubicacion? `• ${form.ubicacion}`:''}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Tipo</div><div className="text-white font-medium">{form.tipo}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Tags</div><div className="text-white font-medium">{form.tags||'—'}</div></div>
-                </div>
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400 text-sm mb-1">Descripción</div><div className="text-gray-100 whitespace-pre-wrap">{form.descripcion||'—'}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400 text-sm mb-1">Causas</div><div className="text-gray-100 whitespace-pre-wrap">{form.causas||'—'}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400 text-sm mb-1">Acciones</div><div className="text-gray-100 whitespace-pre-wrap">{form.acciones||'—'}</div></div>
-                  <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400 text-sm mb-1">Responsable/Compromiso</div><div className="text-gray-100 whitespace-pre-wrap">{(form.responsable||'—')+(form.compromiso? `
-Fecha compromiso: ${form.compromiso}`:'')}</div></div>
-                </div>
-                {form.fotos?.length>0 && (
-                  <div className="mt-4">
-                    <div className="text-white font-semibold mb-2">Evidencias</div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                      {form.fotos.map((f,i)=> (
-                        <figure key={i} className="bg-gray-800/60 rounded-xl overflow-hidden border border-gray-700">
-                          <img src={f.url} alt={`Foto ${i+1}`} onClick={()=>openViewer(i)} className="w-full h-40 object-cover cursor-zoom-in" />
-                          {f.nota && <figcaption className="text-xs text-gray-300 p-2">{f.nota}</figcaption>}
-                        </figure>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="mt-6 flex items-center justify-between">
-              <button onClick={()=>setStep(s=>Math.max(1,s-1))} disabled={step===1} className={`px-4 py-2 rounded-xl text-sm ${step===1? 'bg-gray-700/60 text-gray-400 cursor-not-allowed':'bg-gray-700 hover:bg-gray-600 text-white'}`}>Atrás</button>
-              <div className="flex items-center gap-2">
-                {step<5 && <button onClick={()=>setStep(s=>Math.min(5,s+1))} disabled={!validarStep(step)} className={`px-4 py-2 rounded-xl text-sm ${!validarStep(step)? 'bg-indigo-600/50 text-white/70 cursor-not-allowed':'bg-indigo-600 hover:bg-indigo-500 text-white'}`}>Siguiente</button>}
-                {step===5 && <button disabled={!canEdit||saving} onClick={saveReport} className={`px-4 py-2 rounded-xl text-sm ${!canEdit? 'bg-gray-600/60 cursor-not-allowed text-white/70':'bg-emerald-600 hover:bg-emerald-500 text-white'}`}>{saving? 'Guardando…':'Guardar'}</button>}
-              </div>
-            </div>
-          </div>
-
-          {/* Listado */}
-          <aside className="space-y-6">
-            <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-white">Reportes</h3>
-                <label className="text-xs text-gray-300 inline-flex items-center gap-1">
-                  <input type="checkbox" className="accent-indigo-600" checked={onlyMine} onChange={(e)=>setOnlyMine(e.target.checked)} /> Solo míos
-                </label>
-              </div>
-              <div className="mt-2 max-h-[420px] overflow-auto pr-1 space-y-2">
-                {filtered.map((it)=> (
-                  <div key={it._id} className="bg-gray-800/60 border border-gray-700 rounded-xl p-3 flex items-start gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2"><span className="text-white font-semibold text-sm">{it.folio}</span><Badge>{it.severidad}</Badge></div>
-                      <div className="text-xs text-gray-300 mt-1 flex flex-wrap gap-2"><span>{it.fecha} {it.hora}</span><span>• {it.tipo}</span><span>• {it.area||'(sin área)'}</span><span>• {it.ownerName||'—'}</span></div>
-                      <div className="text-xs text-gray-400 line-clamp-2 mt-1">{it.descripcion}</div>
-                    </div>
-                    <div className="flex flex-col gap-2 w-28">
-                      <button onClick={()=>onLoadReport(it)} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-1">Abrir</button>
-                      <button onClick={()=>onDeleteReport(it)} disabled={!(currentUser.role==='admin' || it.ownerId===currentUser.id)} className="text-xs bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white rounded-lg py-1">Eliminar</button>
-                    </div>
-                  </div>
-                ))}
-                {filtered.length===0 && <div className="text-sm text-gray-400">No hay resultados.</div>}
-              </div>
-            </div>
-
-            <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
-              <h3 className="text-sm font-semibold text-white mb-2">Consejos</h3>
-              <ul className="list-disc pl-5 text-xs text-gray-300 space-y-1">
-                <li>Click en una foto para ampliarla. Usa ← → o los botones para navegar. Cierra con × (arriba izquierda) o Esc.</li>
-                <li>El token de acceso se renueva con cookie httpOnly (no verás el refresh).</li>
-                <li>Solo el propietario edita su reporte; admin edita todo.</li>
-                <li>Para fotos reales, configura Cloudinary en el backend.</li>
-                <li>Usa "Exportar PDF" en el Paso 5 para descargar el reporte con fotos.</li>
-              </ul>
-            </div>
-          </aside>
-        </div>
+        <Routes>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/" element={reportPage} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </div>
 
-      {/* Visor modal */}
-      {viewer.open && (
+      {location.pathname === "/" && viewer.open && (
         <Lightbox
           photos={form.fotos}
           index={viewer.index}
@@ -614,5 +672,13 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
         />
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppInner />
+    </BrowserRouter>
   );
 }
