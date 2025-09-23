@@ -13,7 +13,7 @@ import uploadRoutes from './routes/upload.js';
 
 const app = express();
 
-/** ====== CORS (lista blanca desde ENV) ====== */
+/** CORS dinámico */
 const allowed = new Set(
   (env.CORS_ORIGIN || '')
     .split(',')
@@ -23,20 +23,17 @@ const allowed = new Set(
 
 const corsConfig = {
   origin(origin, cb) {
-    // Permite curl/Postman (sin header Origin)
-    if (!origin) return cb(null, true);
-    // Sólo orígenes listados en CORS_ORIGIN
-    if (allowed.has(origin)) return cb(null, true);
+    if (!origin) return cb(null, true);              // curl/Postman
+    if (allowed.has(origin)) return cb(null, true);  // coincide con whitelist
     return cb(new Error(`Origin not allowed: ${origin}`));
   },
-  credentials: true, // necesario para cookie httpOnly
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
   optionsSuccessStatus: 204
 };
 
-/** ====== Middlewares base ====== */
-app.set('trust proxy', 1); // requerido para cookies secure detrás de proxy/CDN
+app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors(corsConfig));
 app.options('*', cors(corsConfig)); // preflight global
@@ -45,27 +42,25 @@ app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-// Rate limit básico
 const limiter = rateLimit({ windowMs: 60_000, max: 120 });
 app.use(limiter);
 
-/** ====== Health ====== */
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, uptime: process.uptime() });
-});
+/** Health */
+app.get('/api/health', (req, res) => res.json({ ok: true, uptime: process.uptime() }));
 
-/** ====== Rutas ====== */
+/** Rutas */
 app.use('/api/auth', authRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/upload', uploadRoutes);
 
-/** ====== 404 ====== */
+/** 404 */
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
-/** ====== 500 ====== */
+/** 500 */
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: 'Internal error' });
 });
 
 export default app;
+
