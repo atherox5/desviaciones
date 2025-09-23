@@ -1,3 +1,4 @@
+// api/src/routes/reports.js
 import { Router } from 'express';
 import { z } from 'zod';
 import Report from '../models/Report.js';
@@ -6,14 +7,14 @@ import { authRequired } from '../middleware/auth.js';
 const router = Router();
 
 const fotoZ = z.object({
-  url: z.string().url(),           // http/https
+  url: z.string().url(), // http/https
   nota: z.string().optional().default(''),
 });
 
 const reportZ = z.object({
-  folio: z.string().min(5).optional(),       // ahora opcional (lo autogeneramos si falta)
-  fecha: z.string(),                          // YYYY-MM-DD
-  hora: z.string(),                           // HH:mm
+  folio: z.string().optional(),           // -> se autogenera si falta o colisiona
+  fecha: z.string(),                      // YYYY-MM-DD
+  hora: z.string(),                       // HH:mm
   reportante: z.string().optional().default(''),
   area: z.string().optional().default(''),
   ubicacion: z.string().optional().default(''),
@@ -30,50 +31,85 @@ const reportZ = z.object({
 
 router.use(authRequired);
 
-/* ------------------------- utilidades folio ------------------------- */
-const pad2 = (n) => (n < 10 ? `0${n}` : `${n}`);
-function ddmmyy(dateStr) {
-  const d = dateStr ? new Date(dateStr) : new Date();
+/* ========================= Helpers ========================= */
+const pad2 = (n) => String(n).padStart(2, '0');
+
+function toDateSafe(str) {
+  // Acepta "YYYY-MM-DD" o cae a hoy
+  if (typeof str === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const [y, m, d] = str.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+// ddmmyy (ej: 25-09-23 -> "250923")
+function toDDMMYY(str) {
+  const d = toDateSafe(str);
   const dd = pad2(d.getDate());
   const mm = pad2(d.getMonth() + 1);
   const yy = String(d.getFullYear()).slice(-2);
   return `${dd}${mm}${yy}`;
 }
 
-async function nextFolio(fecha) {
-  const base = ddmmyy(fecha); // p.ej. 250923
-  const rx = new RegExp(`^DESV-${base}-\\d{2}$`);
-  const last = await Report.find({ folio: { $regex: rx } })
-    .sort({ folio: -1 })
-    .limit(1);
-  let seq = 1;
-  if (last.length) {
-    const n = parseInt(last[0].folio.split('-').pop(), 10);
-    if (!Number.isNaN(n)) seq = n + 1;
-  }
-  return `DESV-${base}-${String(seq).padStart(2, '0')}`;
+// Calcula el siguiente folio para la fecha dada, buscando el mayor sufijo numérico.
+// Soporta sufijos de 2 o 3 dígitos (01..99..100..)
+async function nextFolioForDate(fechaStr) {
+  const base = toDDMMYY(fechaStr);
+  const prefix = `DESV-${base}-`;
+
+  // Agregación: extrae sufijo numérico y obtiene el máximo
+  const [last] = await Report.aggregate([
+    { $match: { folio: { $regex: `^${prefix}\\d{2,3}$` } } },
+    {
+      $addFields: {
+        _suf: {
+          $toInt: { $arrayElemAt: [{ $split: ['$folio', '-'] }, -1] },
+        },
+      },
+    },
+    { $sort: { _suf: -1 } },
+    { $limit: 1 },
+  ]);
+
+  const next = last ? last._suf + 1 : 1;
+  const pad = next >= 100 ? 3 : 2;
+  return prefix + String(next).padStart(pad, '0');
 }
 
-/* ------------------------- helpers ------------------------- */
+// Limpia y normaliza array de fotos
 function cleanFotos(arr = []) {
   return (arr || [])
     .filter((f) => f && typeof f.url === 'string' && /^https?:\/\//.test(f.url))
     .map((f) => ({ url: f.url, nota: f.nota || '' }));
 }
 
-/* ---------------------------- RUTAS ---------------------------- */
+/* ========================= Rutas ========================= */
 
+// (Opcional) Previsualizar próximo folio para una fecha dada
+// GET /api/reports/next-folio?fecha=YYYY-MM-DD
+router.get('/next-folio', async (req, res) => {
+  try {
+    const fecha = (req.query.fecha || '').toString();
+    const folio = await nextFolioForDate(fecha);
+    res.json({ folio });
+  } catch (e) {
+    console.error('[GET /reports/next-folio] error:', e);
+    res.status(500).json({ error: 'No se pudo calcular el folio' });
+  }
+});
+
+// Listado con filtros básicos
 // GET /api/reports?owner=me|all&q=texto
 router.get('/', async (req, res) => {
   const owner = req.query.owner;
   const q = (req.query.q || '').toString().trim();
   const filter = {};
 
-  if (req.user.role !== 'admin') {
-    filter.ownerId = req.user.id;
-  } else if (owner === 'me') {
-    filter.ownerId = req.user.id;
-  }
+  // Convencional solo ve los propios; admin puede ver todos o "me"
+  if (req.user.role !== 'admin') filter.ownerId = req.user.id;
+  else if (owner === 'me') filter.ownerId = req.user.id;
 
   if (q) {
     filter.$or = [
@@ -92,25 +128,18 @@ router.get('/', async (req, res) => {
   res.json(items);
 });
 
-// POST /api/reports  (crea con folio único)
+// Crear (autogenera folio si falta o colisiona)
 router.post('/', async (req, res) => {
   const parsed = reportZ.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Datos inválidos' });
 
-  // normaliza fotos y folio
   const data = { ...parsed.data, fotos: cleanFotos(parsed.data.fotos) };
 
-  // genera folio si falta o si choca
-  let folio = data.folio;
-  if (!folio) {
-    folio = await nextFolio(data.fecha);
-  } else {
-    const exists = await Report.exists({ folio });
-    if (exists) folio = await nextFolio(data.fecha);
-  }
+  let folio = (data.folio || '').trim();
+  if (!folio) folio = await nextFolioForDate(data.fecha);
 
-  // intenta crear; si hay carrera por folio, recalcula y reintenta
-  for (let i = 0; i < 3; i++) {
+  // Reintentos por colisiones de índice único (concurrencia)
+  for (let i = 0; i < 5; i++) {
     try {
       const item = await Report.create({
         ...data,
@@ -120,18 +149,19 @@ router.post('/', async (req, res) => {
       });
       return res.status(201).json(item);
     } catch (e) {
+      // 11000 = duplicate key (folio único)
       if (e?.code === 11000 && e?.keyPattern?.folio) {
-        folio = await nextFolio(data.fecha);
+        folio = await nextFolioForDate(data.fecha);
         continue;
       }
       console.error('[POST /reports] error:', e);
       return res.status(500).json({ error: 'No se pudo crear' });
     }
   }
-  return res.status(500).json({ error: 'No se pudo generar folio único' });
+  return res.status(409).json({ error: 'No se pudo generar folio único, reintente' });
 });
 
-// GET /api/reports/:id
+// Obtener por id
 router.get('/:id', async (req, res) => {
   const it = await Report.findById(req.params.id);
   if (!it) return res.status(404).json({ error: 'No encontrado' });
@@ -141,7 +171,7 @@ router.get('/:id', async (req, res) => {
   res.json(it);
 });
 
-// PUT /api/reports/:id  (actualiza; si cambian folio y choca, asigna el siguiente)
+// Actualizar (si cambian folio y choca, asigna el siguiente de la fecha)
 router.put('/:id', async (req, res) => {
   const it = await Report.findById(req.params.id);
   if (!it) return res.status(404).json({ error: 'No encontrado' });
@@ -154,32 +184,30 @@ router.put('/:id', async (req, res) => {
 
   const data = { ...parsed.data, fotos: cleanFotos(parsed.data.fotos) };
 
-  // si el folio cambió y existe en otro doc, asigna el siguiente
+  // Si viene un folio diferente y ya existe en otro doc, reasigna al siguiente
   if (data.folio && data.folio !== it.folio) {
     const exists = await Report.findOne({ folio: data.folio, _id: { $ne: it._id } });
-    if (exists) {
-      data.folio = await nextFolio(data.fecha);
-    }
+    if (exists) data.folio = await nextFolioForDate(data.fecha || it.fecha);
   }
 
   Object.assign(it, data);
 
   try {
     await it.save();
-    return res.json(it);
+    res.json(it);
   } catch (e) {
     if (e?.code === 11000 && e?.keyPattern?.folio) {
-      // último salvavidas: recalcula y guarda
-      it.folio = await nextFolio(it.fecha);
+      // Último salvavidas: si chocó, generamos otro y guardamos
+      it.folio = await nextFolioForDate(it.fecha);
       await it.save();
       return res.json(it);
     }
     console.error('[PUT /reports/:id] error:', e);
-    return res.status(500).json({ error: 'No se pudo actualizar' });
+    res.status(500).json({ error: 'No se pudo actualizar' });
   }
 });
 
-// DELETE /api/reports/:id
+// Eliminar
 router.delete('/:id', async (req, res) => {
   const it = await Report.findById(req.params.id);
   if (!it) return res.status(404).json({ error: 'No encontrado' });
