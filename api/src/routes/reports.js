@@ -21,6 +21,7 @@ const reportZ = z.object({
   responsable: z.string().optional().default(''),
   compromiso: z.string().optional().default(''),
   tags: z.string().optional().default(''),
+  sapAviso: z.string().optional().default(''),
   fotos: z.array(fotoZ).optional().default([]),
   status: z.enum(['pendiente','tratamiento','concluido']).optional() // opcional al crear
 });

@@ -129,6 +129,17 @@ const horaActual = () => { const d = new Date(); return `${pad2(d.getHours())}:$
 const TIPOS = ["Seguridad","Calidad","Medio Ambiente","Mantención","Producción","Logística","Otros"];
 const SEVERIDADES = ["Baja","Media","Alta","Crítica"];
 const AREAS = ["Planta Concentradora","Líneas STR 28\"","Líneas STR 36\"","Chancado","Espesadores","Relaves","Mantenimiento","Operaciones Mina"];
+const ESTADOS = [
+  { value: 'pendiente', label: 'Pendiente' },
+  { value: 'tratamiento', label: 'En tratamiento' },
+  { value: 'concluido', label: 'Concluido' }
+];
+const ESTADO_LABEL = ESTADOS.reduce((acc, it) => ({ ...acc, [it.value]: it.label }), {});
+const ESTADO_COLOR = {
+  pendiente: 'bg-slate-600',
+  tratamiento: 'bg-amber-500',
+  concluido: 'bg-emerald-600'
+};
 
 const steps = [
   { id: 1, title: "Datos básicos" },
@@ -206,6 +217,8 @@ const emptyReport = () => ({
   responsable: "",
   compromiso: "",
   tags: "",
+  sapAviso: "",
+  status: "pendiente",
   fotos: [], // {url, nota}
   ownerId: null,
   ownerName: "",
@@ -425,7 +438,7 @@ function AppInner() {
         }
       }
       let saved; if (!form._id) saved = await createReport(payload); else saved = await updateReport(form._id, payload);
-      setForm(saved);
+      setForm({ ...emptyReport(), ...saved });
       const list = await listReports({ owner: currentUser.role==='admin' && !onlyMine ? undefined : 'me' });
       setItems(list); alert("Guardado ✔");
     } catch (e) { console.error(e); alert("No se pudo guardar"); }
@@ -451,7 +464,11 @@ function AppInner() {
     } finally { setUploading(false); }
   }
 
-  function onLoadReport(it) { setForm(it); setStep(1); }
+  function onLoadReport(it) {
+    const base = emptyReport();
+    setForm({ ...base, ...it });
+    setStep(1);
+  }
   async function onDeleteReport(it) {
     if (!confirm(`¿Eliminar ${it.folio}?`)) return; await deleteReport(it._id); setForm(emptyReport());
     const list = await listReports({ owner: currentUser.role==='admin' && !onlyMine ? undefined : 'me' }); setItems(list);
@@ -495,12 +512,17 @@ function AppInner() {
 
         {step===1 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Campo label="Folio"><TextInput value={form.folio} onChange={(e)=>canEdit && setForm({...form, folio:e.target.value})} disabled={!canEdit} /></Campo>
+            <Campo label="Folio generado">
+              <TextInput value={form.folio} readOnly disabled className="cursor-not-allowed opacity-80" title="El folio se genera automáticamente" />
+            </Campo>
+            <Campo label="Número de aviso SAP">
+              <TextInput value={form.sapAviso||""} onChange={(e)=>canEdit && setForm({...form, sapAviso:e.target.value})} disabled={!canEdit} placeholder="Ej: 50012345" />
+            </Campo>
             <Campo label="Reportante"><TextInput value={form.reportante} onChange={(e)=>canEdit && setForm({...form, reportante:e.target.value})} disabled={!canEdit} /></Campo>
             <Campo label="Fecha" required><TextInput type="date" value={form.fecha} onChange={(e)=>canEdit && setForm({...form, fecha:e.target.value})} disabled={!canEdit} /></Campo>
             <Campo label="Hora" required><TextInput type="time" value={form.hora} onChange={(e)=>canEdit && setForm({...form, hora:e.target.value})} disabled={!canEdit} /></Campo>
             <Campo label="Área"><Select value={form.area} onChange={(e)=>canEdit && setForm({...form, area:e.target.value})} disabled={!canEdit}><option value="">Seleccione área…</option>{AREAS.map(a=> <option key={a} value={a}>{a}</option>)}</Select></Campo>
-            <Campo label="Ubicación específica"><TextInput value={form.ubicacion} onChange={(e)=>canEdit && setForm({...form, ubicacion:e.target.value})} disabled={!canEdit} /></Campo>
+            <div className="md:col-span-2"><Campo label="Ubicación específica"><TextInput value={form.ubicacion} onChange={(e)=>canEdit && setForm({...form, ubicacion:e.target.value})} disabled={!canEdit} /></Campo></div>
           </div>
         )}
 
@@ -516,6 +538,11 @@ function AppInner() {
 
         {step===3 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Campo label="Estado del reporte">
+              <Select value={form.status||'pendiente'} onChange={(e)=>canEdit && setForm({...form, status:e.target.value})} disabled={!canEdit}>
+                {ESTADOS.map((opt)=> <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </Select>
+            </Campo>
             <div className="md:col-span-2"><Campo label="Acciones / contención"><TextArea value={form.acciones} onChange={(e)=>canEdit && setForm({...form, acciones:e.target.value})} disabled={!canEdit} /></Campo></div>
             <Campo label="Responsable"><TextInput value={form.responsable} onChange={(e)=>canEdit && setForm({...form, responsable:e.target.value})} disabled={!canEdit} /></Campo>
             <Campo label="Fecha compromiso"><TextInput type="date" value={form.compromiso||""} onChange={(e)=>canEdit && setForm({...form, compromiso:e.target.value})} disabled={!canEdit} /></Campo>
@@ -549,6 +576,7 @@ function AppInner() {
               <h3 className="text-white font-semibold">Resumen</h3>
               <div className="flex items-center gap-2">
                 <Badge color={{'Baja':'bg-emerald-600','Media':'bg-amber-500','Alta':'bg-orange-600','Crítica':'bg-red-600'}[form.severidad]||'bg-indigo-600'}>{form.severidad}</Badge>
+                <Badge color={ESTADO_COLOR[form.status] || 'bg-slate-600'}>{ESTADO_LABEL[form.status] || 'Pendiente'}</Badge>
                 <button onClick={()=>exportReportPDF(form)} className="px-3 py-1.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs">Exportar PDF</button>
               </div>
             </div>
@@ -559,6 +587,8 @@ function AppInner() {
               <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Área/Ubicación</div><div className="text-white font-medium">{form.area||'—'} {form.ubicacion? `• ${form.ubicacion}`:''}</div></div>
               <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Tipo</div><div className="text-white font-medium">{form.tipo}</div></div>
               <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Tags</div><div className="text-white font-medium">{form.tags||'—'}</div></div>
+              <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Estado</div><div className="text-white font-medium">{ESTADO_LABEL[form.status] || 'Pendiente'}</div></div>
+              <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400">Número aviso SAP</div><div className="text-white font-medium">{form.sapAviso || '—'}</div></div>
             </div>
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-gray-800/60 rounded-xl p-3 border border-gray-700"><div className="text-gray-400 text-sm mb-1">Descripción</div><div className="text-gray-100 whitespace-pre-wrap">{form.descripcion||'—'}</div></div>
@@ -602,10 +632,10 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
             </label>
           </div>
           <div className="mt-2 max-h-[420px] overflow-auto pr-1 space-y-2">
-            {filtered.map((it)=> (
-              <div key={it._id} className="bg-gray-800/60 border border-gray-700 rounded-xl p-3 flex items-start gap-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2"><span className="text-white font-semibold text-sm">{it.folio}</span><Badge>{it.severidad}</Badge></div>
+                {filtered.map((it)=> (
+                  <div key={it._id} className="bg-gray-800/60 border border-gray-700 rounded-xl p-3 flex items-start gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap"><span className="text-white font-semibold text-sm">{it.folio}</span><Badge>{it.severidad}</Badge><Badge color={ESTADO_COLOR[it.status] || 'bg-slate-600'}>{ESTADO_LABEL[it.status] || 'Pendiente'}</Badge></div>
                   <div className="text-xs text-gray-300 mt-1 flex flex-wrap gap-2"><span>{it.fecha} {it.hora}</span><span>• {it.tipo}</span><span>• {it.area||'(sin área)'}</span><span>• {it.ownerName||'—'}</span></div>
                   <div className="text-xs text-gray-400 line-clamp-2 mt-1">{it.descripcion}</div>
                 </div>

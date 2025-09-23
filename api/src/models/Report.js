@@ -21,6 +21,7 @@ const ReportSchema = new mongoose.Schema(
     responsable: { type: String, default: '' },
     compromiso: { type: String, default: '' },
     tags: { type: String, default: '' },
+    sapAviso: { type: String, default: '' },
     fotos: { type: [FotoSchema], default: [] },
     status: {                                  // <- estado del flujo
       type: String,
