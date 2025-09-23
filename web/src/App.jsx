@@ -19,7 +19,9 @@ async function apiFetch(path, options = {}, retry = true) {
   const headers = new Headers(options.headers || {});
   if (!(options.body instanceof FormData)) headers.set("Content-Type", headers.get("Content-Type") || "application/json");
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
-  const res = await fetch(`${API}${path}`, { ...options, headers, credentials: "include" });
+  const fetchOpts = { ...options, headers, credentials: "include" };
+  if (!fetchOpts.cache) fetchOpts.cache = "no-store";
+  const res = await fetch(`${API}${path}`, fetchOpts);
   if (res.status === 401 && retry) {
     const r = await fetch(`${API}/auth/refresh`, { method: "POST", credentials: "include" });
     if (r.ok) {
