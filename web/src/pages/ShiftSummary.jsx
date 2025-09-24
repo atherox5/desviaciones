@@ -83,6 +83,15 @@ const AREA_LOCATIONS = {
     'Piscinas de emergencias',
     'Bombas de descarga TK-711',
   ],
+  'Espesadores 410': [
+    'Novedades relevantes',
+    'Espesadores de relave',
+    'Válvulas de descarga espesadores',
+    'Bombas de floculante',
+    'Estanques de floculante y sistema de preparación',
+    'Cajón distribuidor ST-077',
+    'Bodega de floculante',
+  ],
 };
 
 function Label({ title, children, required }) {
