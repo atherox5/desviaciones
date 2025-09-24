@@ -124,7 +124,7 @@ export default function ShiftSummary({
     setForm((prev) => {
       const options = AREA_LOCATIONS[prev.area] || null;
       if (!options) return prev;
-      if (options.includes(prev.ubicacion)) return prev;
+      if (!prev.ubicacion || options.includes(prev.ubicacion)) return prev;
       return { ...prev, ubicacion: '' };
     });
   }, [form.area]);
@@ -404,16 +404,20 @@ export default function ShiftSummary({
             </Select>
           </Label>
           <div className="md:col-span-2">
-            <Label title="Ubicación específica">
-              {locationOptions ? (
-                <Select value={form.ubicacion} onChange={(e) => setForm((prev) => ({ ...prev, ubicacion: e.target.value }))} required>
+            <Label title="Ubicación específica" required={Boolean(locationOptions)}>
+              {form.area ? (
+                <Select
+                  value={form.ubicacion}
+                  onChange={(e) => setForm((prev) => ({ ...prev, ubicacion: e.target.value }))}
+                  required={Boolean(locationOptions)}
+                >
                   <option value="">Seleccione ubicación…</option>
-                  {locationOptions.map((opt) => (
+                  {(locationOptions || []).map((opt) => (
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
                 </Select>
               ) : (
-                <TextInput value={form.ubicacion} onChange={(e) => setForm((prev) => ({ ...prev, ubicacion: e.target.value }))} placeholder="Ej: Planta norte, Patio 3…" />
+                <TextInput value="" disabled placeholder="Selecciona un área para ver ubicaciones" />
               )}
             </Label>
           </div>
