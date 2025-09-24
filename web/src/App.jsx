@@ -447,6 +447,7 @@ function AppInner() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [booting, setBooting] = useState(true);
+  const [pendingRedirect, setPendingRedirect] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -538,7 +539,7 @@ function AppInner() {
       setCurrentUser(user);
       setAuthError("");
       setUsersExist(true);
-      navigate('/', { replace: true });
+      setPendingRedirect(true);
     } catch(e) {
       setAuthError(e.message || 'Error');
       try {
@@ -553,7 +554,7 @@ function AppInner() {
       setCurrentUser(user);
       setAuthError("");
       setUsersExist(true);
-      navigate('/', { replace: true });
+      setPendingRedirect(true);
     } catch(e) {
       setAuthError(e.message || 'Error');
     }
@@ -564,6 +565,7 @@ function AppInner() {
     setForm(emptyReport());
     setItems([]);
     setUsersExist(true);
+    setPendingRedirect(false);
     navigate('/', { replace: true });
   };
 
@@ -576,6 +578,13 @@ function AppInner() {
   const handlePasswordChange = async (payload) => {
     await changePasswordFn(payload);
   };
+
+  useEffect(() => {
+    if (pendingRedirect && currentUser) {
+      navigate('/', { replace: true });
+      setPendingRedirect(false);
+    }
+  }, [pendingRedirect, currentUser, navigate]);
 
   const validarStep = (s) => {
     if (s === 1) return Boolean(form.fecha && form.hora);
