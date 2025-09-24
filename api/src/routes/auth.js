@@ -42,7 +42,7 @@ router.post('/setup-admin', async (req, res) => {
   const { username, password, fullName } = parsed.data;
   const passHash = await bcrypt.hash(password, 12);
   const user = await User.create({ username, passHash, role: 'admin', fullName: fullName || username });
-  const access = signAccessToken({ id: user._id, username: user.username, role: user.role });
+  const access = signAccessToken({ id: user._id, username: user.username, role: user.role, fullName: user.fullName || '', photoUrl: user.photoUrl || '' });
   const refresh = signRefreshToken({ id: user._id });
   res.cookie('refreshToken', refresh, refreshCookieOptions);
   res.json({ user: toUserPayload(user), access });
@@ -60,7 +60,7 @@ router.post('/login', async (req, res) => {
   if (!user) return res.status(401).json({ error: 'Credenciales' });
   const ok = await bcrypt.compare(password, user.passHash);
   if (!ok) return res.status(401).json({ error: 'Credenciales' });
-  const access = signAccessToken({ id: user._id, username: user.username, role: user.role });
+  const access = signAccessToken({ id: user._id, username: user.username, role: user.role, fullName: user.fullName || '', photoUrl: user.photoUrl || '' });
   const refresh = signRefreshToken({ id: user._id });
   res.cookie('refreshToken', refresh, refreshCookieOptions);
   res.json({ user: toUserPayload(user), access });
@@ -80,7 +80,7 @@ router.post('/refresh', async (req, res) => {
     const user = await User.findById(id);
     if (!user) return res.status(401).json({ error: 'Usuario no existe' });
     const payload = toUserPayload(user);
-    const access = signAccessToken({ id: user._id, username: user.username, role: user.role });
+    const access = signAccessToken({ id: user._id, username: user.username, role: user.role, fullName: user.fullName || '', photoUrl: user.photoUrl || '' });
     res.json({ access, user: payload });
   } catch (e) {
     return res.status(401).json({ error: 'Refresh inválido' });

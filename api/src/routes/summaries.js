@@ -55,7 +55,7 @@ router.post('/', async (req, res) => {
     const item = await ShiftSummary.create({
       ...data,
       ownerId: req.user.id,
-      ownerName: req.user.username,
+      ownerName: req.user.fullName?.trim() ? req.user.fullName : req.user.username,
     });
     res.status(201).json(item);
   } catch (e) {

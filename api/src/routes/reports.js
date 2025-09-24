@@ -171,7 +171,7 @@ router.post('/', async (req, res) => {
         ...data,
         folio,
         ownerId: req.user.id,
-        ownerName: req.user.username,
+        ownerName: req.user.fullName?.trim() ? req.user.fullName : req.user.username,
       });
       return res.status(201).json(item);
     } catch (e) {
