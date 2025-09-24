@@ -336,30 +336,97 @@ const emptyReport = () => ({
 });
 
 function LoginScreen({ usersExist, onSetupAdmin, onLogin, error }) {
-  const [tab, setTab] = useState(usersExist ? "login" : "setup");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [captcha, setCaptcha] = useState(() => createCaptcha());
+  const [captchaInput, setCaptchaInput] = useState("");
+  const [localError, setLocalError] = useState("");
+
+  useEffect(() => {
+    setUsername("");
+    setPassword("");
+    setFullName("");
+    setCaptcha(createCaptcha());
+    setCaptchaInput("");
+    setLocalError("");
+  }, [usersExist]);
+
+  const handleLoginClick = () => {
+    if (!captchaInput.trim()) {
+      setLocalError('Resuelve el captcha para continuar.');
+      return;
+    }
+    if (captchaInput.trim() !== captcha.answer) {
+      setLocalError('Captcha incorrecto. Inténtalo nuevamente.');
+      setCaptcha(createCaptcha());
+      setCaptchaInput("");
+      return;
+    }
+    setLocalError("");
+    onLogin(username, password);
+  };
+
   return (
-    <div className="max-w-md mx-auto bg-gray-900/60 border border-gray-800 rounded-2xl p-6 text-center">
-      <div className="flex items-center justify-center gap-2 mb-4">
-        {!usersExist && (
-          <button className={`px-3 py-1.5 rounded-lg text-sm ${tab==='setup'? 'bg-indigo-600 text-white':'bg-gray-800 text-gray-200'}`} onClick={()=>setTab('setup')}>Configurar admin</button>
-        )}
-        <button className={`px-3 py-1.5 rounded-lg text-sm ${tab==='login'? 'bg-indigo-600 text-white':'bg-gray-800 text-gray-200'}`} onClick={()=>{ setTab('login'); setFullName(''); }}>Iniciar sesión</button>
-      </div>
-      {error && <div className="mb-3 text-sm text-red-400">{error}</div>}
-      <Campo label="Usuario" required><TextInput value={username} onChange={(e)=>setUsername(e.target.value)} className="text-center" /></Campo>
-      <Campo label="Contraseña" required><TextInput type="password" value={password} onChange={(e)=>setPassword(e.target.value)} className="text-center" /></Campo>
-      {tab==='setup' && (
-        <>
-          <Campo label="Nombre completo" required><TextInput value={fullName} onChange={(e)=>setFullName(e.target.value)} className="text-center" /></Campo>
-          <button onClick={()=>onSetupAdmin(username,password,fullName)} className="w-full px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm">Crear superusuario</button>
-        </>
+    <div className="max-w-md mx-auto bg-gray-900/60 border border-gray-800 rounded-2xl p-6 text-center space-y-3">
+      {!usersExist && <h2 className="text-lg font-semibold text-white">Configurar superusuario</h2>}
+      {usersExist && <h2 className="text-lg font-semibold text-white">Iniciar sesión</h2>}
+      {(error || localError) && (
+        <div className="text-sm text-red-400">{error || localError}</div>
       )}
-      {tab==='login' && <button onClick={()=>onLogin(username,password)} className="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Entrar</button>}
+      <Campo label="Usuario" required>
+        <TextInput value={username} onChange={(e)=>setUsername(e.target.value)} className="text-center" />
+      </Campo>
+      <Campo label="Contraseña" required>
+        <TextInput type="password" value={password} onChange={(e)=>setPassword(e.target.value)} className="text-center" />
+      </Campo>
+      {!usersExist && (
+        <Campo label="Nombre completo" required>
+          <TextInput value={fullName} onChange={(e)=>setFullName(e.target.value)} className="text-center" />
+        </Campo>
+      )}
+      {usersExist && (
+        <div className="space-y-2 text-left">
+          <div className="text-sm text-gray-300">
+            Captcha: <span className="font-semibold text-white">{captcha.question}</span>
+          </div>
+          <TextInput
+            value={captchaInput}
+            onChange={(e)=>setCaptchaInput(e.target.value)}
+            placeholder="Escribe la respuesta"
+            className="text-center"
+          />
+        </div>
+      )}
+      <div>
+        {usersExist ? (
+          <button
+            onClick={handleLoginClick}
+            className="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm"
+          >
+            Entrar
+          </button>
+        ) : (
+          <button
+            onClick={()=>onSetupAdmin(username, password, fullName)}
+            className="w-full px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm"
+          >
+            Crear superusuario
+          </button>
+        )}
+      </div>
     </div>
   );
+}
+
+function createCaptcha() {
+  const a = Math.floor(Math.random() * 9) + 1;
+  const b = Math.floor(Math.random() * 9) + 1;
+  const operands = [
+    { question: `${a} + ${b}`, answer: String(a + b) },
+    { question: `${a} × ${b}`, answer: String(a * b) },
+  ];
+  return operands[Math.floor(Math.random() * operands.length)];
 }
 
 // ===== Utilidades para PDF =====
