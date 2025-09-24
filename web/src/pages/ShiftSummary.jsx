@@ -266,21 +266,31 @@ export default function ShiftSummary({
     }
   }
 
+  const locationPriority = useMemo(() => {
+    const map = new Map();
+    for (const entry of entries) {
+      const key = entry.ubicacion?.trim() || 'Sin ubicación específica';
+      const list = AREA_LOCATIONS[entry.area] || [];
+      const idx = list.findIndex((loc) => loc === entry.ubicacion);
+      const value = idx >= 0 ? idx : Number.MAX_SAFE_INTEGER;
+      if (!map.has(key) || value < map.get(key)) map.set(key, value);
+    }
+    return map;
+  }, [entries]);
+
   const sortedEntries = useMemo(() => {
     return [...entries].sort((a, b) => {
-      const locA = (a.ubicacion || '').toLowerCase();
-      const locB = (b.ubicacion || '').toLowerCase();
-      if (locA !== locB) {
-        if (!locA) return 1;
-        if (!locB) return -1;
-        return locA.localeCompare(locB, undefined, { sensitivity: 'base' });
-      }
+      const keyA = a.ubicacion?.trim() || 'Sin ubicación específica';
+      const keyB = b.ubicacion?.trim() || 'Sin ubicación específica';
+      const priA = locationPriority.get(keyA) ?? Number.MAX_SAFE_INTEGER;
+      const priB = locationPriority.get(keyB) ?? Number.MAX_SAFE_INTEGER;
+      if (priA !== priB) return priA - priB;
       const dateA = new Date(a.fecha || a.createdAt || 0).getTime();
       const dateB = new Date(b.fecha || b.createdAt || 0).getTime();
       if (dateA !== dateB) return dateA - dateB; // más antiguo primero
       return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
     });
-  }, [entries]);
+  }, [entries, locationPriority]);
 
   const groupedByLocation = useMemo(() => {
     const map = new Map();
@@ -289,8 +299,13 @@ export default function ShiftSummary({
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(entry);
     }
-    return Array.from(map.entries());
-  }, [sortedEntries]);
+    return Array.from(map.entries()).sort((a, b) => {
+      const priA = locationPriority.get(a[0]) ?? Number.MAX_SAFE_INTEGER;
+      const priB = locationPriority.get(b[0]) ?? Number.MAX_SAFE_INTEGER;
+      if (priA !== priB) return priA - priB;
+      return a[0].localeCompare(b[0], undefined, { sensitivity: 'base' });
+    });
+  }, [sortedEntries, locationPriority]);
 
   async function exportPDF() {
     if (!entries?.length) {
@@ -306,7 +321,7 @@ export default function ShiftSummary({
 
     const uniqueAreas = [...new Set(entries.map((e) => e.area).filter(Boolean))];
     const areaLabel = uniqueAreas.length === 1 ? uniqueAreas[0] : 'Varias áreas';
-    const operatorName = entries[0]?.ownerName || currentUser?.fullName || currentUser?.username || '—';
+    const operatorName = entries[0]?.ownerFullName || entries[0]?.ownerName || currentUser?.fullName || currentUser?.username || '—';
 
     const addLine = (text, opts = {}) => {
       const size = opts.size || 12;
@@ -340,10 +355,7 @@ export default function ShiftSummary({
     doc.text(`Operador: ${operatorName}`, pageW / 2, y, { align: 'center' });
     y += 24;
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.text(`Fecha de generación: ${new Date().toLocaleString()}`, margin, y);
-    y += 18;
+    y += 6;
 
     for (const [ubicacionLabel, items] of groupedByLocation) {
       if (y > pageH - margin - 80) {
