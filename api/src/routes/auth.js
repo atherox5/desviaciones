@@ -12,6 +12,14 @@ const credSchema = z.object({
   password: z.string().min(6).max(200),
 });
 
+const refreshCookieOptions = Object.freeze({
+  httpOnly: true,
+  secure: env.COOKIE_SECURE,
+  sameSite: env.COOKIE_SAMESITE,
+  path: '/api/auth',
+  ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
+});
+
 // Primer admin si no hay usuarios
 router.post('/setup-admin', async (req, res) => {
   const count = await User.countDocuments();
@@ -23,7 +31,7 @@ router.post('/setup-admin', async (req, res) => {
   const user = await User.create({ username, passHash, role: 'admin' });
   const access = signAccessToken({ id: user._id, username: user.username, role: user.role });
   const refresh = signRefreshToken({ id: user._id });
-  res.cookie('refreshToken', refresh, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/api/auth' });
+  res.cookie('refreshToken', refresh, refreshCookieOptions);
   res.json({ user: { id: user._id, username: user.username, role: user.role }, access });
 });
 
@@ -49,7 +57,7 @@ router.post('/login', async (req, res) => {
   if (!ok) return res.status(401).json({ error: 'Credenciales' });
   const access = signAccessToken({ id: user._id, username: user.username, role: user.role });
   const refresh = signRefreshToken({ id: user._id });
-  res.cookie('refreshToken', refresh, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/api/auth' });
+  res.cookie('refreshToken', refresh, refreshCookieOptions);
   res.json({ user: { id: user._id, username: user.username, role: user.role }, access });
 });
 
@@ -75,7 +83,7 @@ router.post('/refresh', async (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
-  res.clearCookie('refreshToken', { path: '/api/auth' });
+  res.clearCookie('refreshToken', refreshCookieOptions);
   res.json({ ok: true });
 });
 
