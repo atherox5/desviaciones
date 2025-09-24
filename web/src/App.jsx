@@ -207,6 +207,16 @@ async function deleteSummaryEntry(id) {
   return res.json();
 }
 
+async function updateSummaryEntry(id, payload) {
+  const res = await apiFetch(`/summaries/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  if (res.status === 401) throw new Error('Sesión expirada');
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data?.error || 'No se pudo actualizar la novedad');
+  }
+  return res.json();
+}
+
 // Firma + subida a Cloudinary (si está configurado). Si falla, devolvemos null para cada archivo.
 async function getSignature(folder) {
   const ts = Math.floor(Date.now() / 1000);
@@ -562,6 +572,7 @@ function AppInner() {
   const listSummariesFn = useCallback((params) => listSummaries(params), []);
   const createSummaryFn = useCallback((payload) => createSummaryEntry(payload), []);
   const deleteSummaryFn = useCallback((id) => deleteSummaryEntry(id), []);
+  const updateSummaryFn = useCallback((id, payload) => updateSummaryEntry(id, payload), []);
   const updateSelfProfileFn = useCallback((payload) => updateSelfProfile(payload), []);
   const changePasswordFn = useCallback((payload) => changeOwnPassword(payload), []);
   const fetchOverviewFn = useCallback(() => fetchUsersOverview(), []);
@@ -610,6 +621,28 @@ function AppInner() {
       return { ...prev, ownerName: name, ownerId, reportante: name };
     });
   }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    if (form._id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch(`/reports/next-folio?fecha=${form.fecha}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !data?.folio) return;
+        setForm((prev) => {
+          if (prev._id) return prev;
+          if (prev.folio === data.folio) return prev;
+          return { ...prev, folio: data.folio };
+        });
+      } catch (err) {
+        console.warn('No se pudo previsualizar folio', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [currentUser, form._id, form.fecha]);
 
   const handleSetupAdmin = async (u,p,name) => {
     try {
@@ -995,6 +1028,7 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
                 onAuthError={handleLogout}
                 onFetchSummaries={listSummariesFn}
                 onCreateSummary={createSummaryFn}
+                onUpdateSummary={updateSummaryFn}
                 onDeleteSummary={deleteSummaryFn}
                 onUploadSignature={getSignature}
                 onUploadFiles={uploadToCloudinary}

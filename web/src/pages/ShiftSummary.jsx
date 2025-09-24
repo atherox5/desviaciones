@@ -93,6 +93,7 @@ export default function ShiftSummary({
   onAuthError,
   onFetchSummaries,
   onCreateSummary,
+  onUpdateSummary,
   onDeleteSummary,
   onUploadSignature,
   onUploadFiles,
@@ -117,6 +118,17 @@ export default function ShiftSummary({
   const [error, setError] = useState('');
   const locationOptions = AREA_LOCATIONS[form.area] || null;
   const canEditDetails = Boolean(form.area) && (!locationOptions || Boolean(form.ubicacion));
+  const [editing, setEditing] = useState(null);
+  const isEditing = Boolean(editing);
+
+  const resetForm = () => setForm({ fecha: hoyISO(), area: '', ubicacion: '', novedades: '', fotos: [] });
+
+  useEffect(() => {
+    if (editing && !entries.some((it) => it._id === editing._id)) {
+      setEditing(null);
+      resetForm();
+    }
+  }, [entries, editing]);
 
   useEffect(() => {
     setForm((prev) => {
@@ -195,7 +207,7 @@ export default function ShiftSummary({
     });
   }
 
-  async function handleCreate(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     if (!form.area) {
       setError('Selecciona un área');
@@ -227,10 +239,17 @@ export default function ShiftSummary({
         alert('Las fotos locales no se guardarán en la base de datos mientras no esté configurado Cloudinary.');
       }
 
-      const created = await onCreateSummary(payload);
-      setForm({ fecha: hoyISO(), area: '', ubicacion: '', novedades: '', fotos: [] });
-      setEntries((prev) => [created, ...prev]);
-      setError('');
+      if (isEditing) {
+        await onUpdateSummary(editing._id, payload);
+        setEditing(null);
+        setError('');
+        resetForm();
+      } else {
+        await onCreateSummary(payload);
+        resetForm();
+        setError('');
+      }
+      await loadEntries();
     } catch (e) {
       console.error(e);
       setError(e.message || 'No se pudo registrar la novedad');
@@ -247,11 +266,36 @@ export default function ShiftSummary({
       await onDeleteSummary(entry._id);
       setEntries((prev) => prev.filter((it) => it._id !== entry._id));
       setError('');
+      if (editing?._id === entry._id) {
+        setEditing(null);
+        resetForm();
+      }
+      await loadEntries();
     } catch (e) {
       console.error(e);
       setError(e.message || 'No se pudo eliminar la novedad');
       if ((e.message || '').toLowerCase().includes('expirada')) onAuthError?.();
     }
+  }
+
+  function handleEdit(entry) {
+    if (!entry) return;
+    setEditing(entry);
+    setForm({
+      fecha: entry.fecha || hoyISO(),
+      area: entry.area || '',
+      ubicacion: entry.ubicacion || '',
+      novedades: entry.novedades || '',
+      fotos: entry.fotos ? entry.fotos.map((f) => ({ ...f })) : [],
+    });
+    setError('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    resetForm();
+    setError('');
   }
 
   const locationPriority = useMemo(() => {
@@ -418,7 +462,7 @@ export default function ShiftSummary({
 
       <section className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5">
         <h2 className="text-lg font-semibold text-white mb-4 text-center">Nueva novedad</h2>
-        <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Label title="Fecha" required>
             <TextInput type="date" value={form.fecha} onChange={(e) => setForm((prev) => ({ ...prev, fecha: e.target.value }))} required />
           </Label>
@@ -473,27 +517,36 @@ export default function ShiftSummary({
               className="w-full text-sm text-gray-300 disabled:opacity-60"
             />
             {uploading && <p className="text-xs text-gray-400 mt-2">Subiendo archivos…</p>}
-            {form.fotos?.length > 0 && (
-              <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {form.fotos.map((foto, idx) => (
-                  <div key={idx} className="bg-gray-800/60 border border-gray-700 rounded-xl overflow-hidden">
-                    <img src={foto.url} alt={`Foto ${idx + 1}`} className="w-full h-40 object-cover" />
-                    <div className="p-2 space-y-2">
-                      <TextInput value={foto.nota || ''} onChange={(e) => updateFotoNota(idx, e.target.value)} placeholder="Nota" />
-                      <button type="button" onClick={() => removeFoto(idx)} className="w-full text-xs bg-red-600 hover:bg-red-500 text-white rounded-lg py-1">Eliminar</button>
-                    </div>
+          {form.fotos?.length > 0 && (
+            <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {form.fotos.map((foto, idx) => (
+                <div key={idx} className="bg-gray-800/60 border border-gray-700 rounded-xl overflow-hidden">
+                  <img src={foto.url} alt={`Foto ${idx + 1}`} className="w-full h-40 object-cover" />
+                  <div className="p-2 space-y-2">
+                    <TextInput value={foto.nota || ''} onChange={(e) => updateFotoNota(idx, e.target.value)} placeholder="Nota" />
+                    <button type="button" onClick={() => removeFoto(idx)} className="w-full text-xs bg-red-600 hover:bg-red-500 text-white rounded-lg py-1">Eliminar</button>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="md:col-span-2 flex justify-end">
-            <button type="submit" disabled={saving || !canEditDetails} className={`px-4 py-2 rounded-xl text-sm ${(saving || !canEditDetails) ? 'bg-emerald-600/60 text-white/70 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}>
-              {saving ? 'Guardando…' : 'Agregar al resumen'}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="md:col-span-2 flex justify-end gap-2">
+          {isEditing && (
+            <button type="button" onClick={cancelEdit} className="px-4 py-2 rounded-xl text-sm bg-gray-700 hover:bg-gray-600 text-white">
+              Cancelar
             </button>
-          </div>
-        </form>
-      </section>
+          )}
+          <button
+            type="submit"
+            disabled={saving || !canEditDetails}
+            className={`px-4 py-2 rounded-xl text-sm ${(saving || !canEditDetails) ? 'bg-emerald-600/60 text-white/70 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
+          >
+            {saving ? 'Guardando…' : isEditing ? 'Actualizar novedad' : 'Agregar al resumen'}
+          </button>
+        </div>
+      </form>
+    </section>
 
       <section className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -521,31 +574,41 @@ export default function ShiftSummary({
             {groupedByLocation.map(([ubicacionLabel, items]) => (
               <div key={ubicacionLabel} className="space-y-3">
                 <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">{ubicacionLabel}</h3>
-                {items.map((entry) => (
-                  <article key={entry._id} className="bg-gray-800/60 border border-gray-700 rounded-2xl p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <h4 className="text-white font-semibold text-base">{entry.area}</h4>
-                        <p className="text-xs text-gray-400">{formatDisplayDate(entry.fecha)} · {entry.ownerName || currentUser?.username || '—'}</p>
+                {items.map((entry) => {
+                  const canManage = currentUser?.role === 'admin' || String(entry.ownerId) === String(currentUser?.id);
+                  const isCurrentEditing = editing?._id === entry._id;
+                  return (
+                    <article key={entry._id} className={`bg-gray-800/60 border ${isCurrentEditing ? 'border-indigo-500' : 'border-gray-700'} rounded-2xl p-4`}>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h4 className="text-white font-semibold text-base">{entry.area}</h4>
+                          <p className="text-xs text-gray-400">{formatDisplayDate(entry.fecha)} · {entry.ownerName || currentUser?.username || '—'}</p>
+                          {isCurrentEditing && <span className="text-xs text-indigo-300">Editando…</span>}
+                        </div>
+                        {canManage && (
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => handleEdit(entry)} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg px-3 py-1">Editar</button>
+                            <button onClick={() => handleDelete(entry)} className="text-xs bg-red-600 hover:bg-red-500 text-white rounded-lg px-3 py-1">Eliminar</button>
+                          </div>
+                        )}
                       </div>
-                      <button onClick={() => handleDelete(entry)} className="text-xs bg-red-600 hover:bg-red-500 text-white rounded-lg px-3 py-1">Eliminar</button>
-                    </div>
-                    {entry.ubicacion && (
-                      <p className="text-xs text-gray-400 mt-2">Ubicación: {entry.ubicacion}</p>
-                    )}
-                    <p className="text-sm text-gray-200 mt-3 whitespace-pre-wrap">{entry.novedades}</p>
-                    {entry.fotos?.length > 0 && (
-                      <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {entry.fotos.map((foto, idx) => (
-                          <figure key={idx} className="bg-gray-900/40 border border-gray-700 rounded-xl overflow-hidden">
-                            <img src={foto.url} alt={`Foto ${idx + 1}`} className="w-full h-32 object-cover" />
-                            {foto.nota && <figcaption className="text-xs text-gray-300 px-2 py-1">{foto.nota}</figcaption>}
-                          </figure>
-                        ))}
-                      </div>
-                    )}
-                  </article>
-                ))}
+                      {entry.ubicacion && (
+                        <p className="text-xs text-gray-400 mt-2">Ubicación: {entry.ubicacion}</p>
+                      )}
+                      <p className="text-sm text-gray-200 mt-3 whitespace-pre-wrap">{entry.novedades}</p>
+                      {entry.fotos?.length > 0 && (
+                        <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {entry.fotos.map((foto, idx) => (
+                            <figure key={idx} className="bg-gray-900/40 border border-gray-700 rounded-xl overflow-hidden">
+                              <img src={foto.url} alt={`Foto ${idx + 1}`} className="w-full h-32 object-cover" />
+                              {foto.nota && <figcaption className="text-xs text-gray-300 px-2 py-1">{foto.nota}</figcaption>}
+                            </figure>
+                          ))}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
             ))}
           </div>

@@ -17,6 +17,16 @@ const summaryZ = z.object({
   fotos: z.array(fotoZ).optional().default([]),
 });
 
+const updateSummaryZ = summaryZ.partial().refine((data) =>
+  Boolean(
+    data.fecha !== undefined ||
+    data.area !== undefined ||
+    data.ubicacion !== undefined ||
+    data.novedades !== undefined ||
+    data.fotos !== undefined
+  ),
+{ message: 'Nada para actualizar' });
+
 function cleanFotos(arr = []) {
   return (arr || [])
     .filter(f => f && typeof f.url === 'string' && /^https?:\/\//.test(f.url))
@@ -77,6 +87,30 @@ router.post('/', async (req, res) => {
   } catch (e) {
     console.error('[POST /summaries] error:', e);
     res.status(500).json({ error: 'No se pudo crear' });
+  }
+});
+
+router.patch('/:id', async (req, res) => {
+  const item = await ShiftSummary.findById(req.params.id);
+  if (!item) return res.status(404).json({ error: 'No encontrado' });
+  const isOwner = String(item.ownerId) === String(req.user.id);
+  const isAdmin = (req.user.role || '').toLowerCase() === 'admin';
+  if (!isOwner && !isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+  const parsed = updateSummaryZ.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues?.[0]?.message || 'Datos inválidos' });
+
+  const data = parsed.data;
+  if (data.fotos) data.fotos = cleanFotos(data.fotos);
+
+  Object.assign(item, data);
+
+  try {
+    await item.save();
+    res.json(item);
+  } catch (e) {
+    console.error('[PATCH /summaries/:id] error:', e);
+    res.status(500).json({ error: 'No se pudo actualizar la novedad' });
   }
 });
 
