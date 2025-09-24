@@ -17,7 +17,7 @@ function Donut({ value = 0 }) {
   );
 }
 
-export default function Dashboard({ apiFetch, onAuthError }) {
+export default function Dashboard({ apiFetch, onAuthError, currentUser }) {
   const [items, setItems] = useState([]);
   const [period, setPeriod] = useState('all');       // 'all' | 'day' | 'month' | 'year'
   const [date, setDate] = useState(() => new Date().toISOString().slice(0,10));
@@ -210,7 +210,7 @@ export default function Dashboard({ apiFetch, onAuthError }) {
               </span>
 
               {/* Controles de estado (el dueño podrá cambiarlo; el backend valida) */}
-              {['pendiente','tratamiento'].includes(r.status || 'pendiente') && (
+              {(['pendiente','tratamiento'].includes(r.status || 'pendiente')) && (currentUser?.role === 'admin' || r.ownerId === currentUser?.id) && (
                 <div className="flex gap-2 ml-2">
                   {r.status === 'pendiente' && (
                     <>

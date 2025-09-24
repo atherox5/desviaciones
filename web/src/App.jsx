@@ -4,6 +4,7 @@ import Dashboard from "./pages/Dashboard.jsx";
 import UsersAdmin from "./pages/UsersAdmin.jsx";
 import ShiftSummary from "./pages/ShiftSummary.jsx";
 import Profile from "./pages/Profile.jsx";
+import Home from "./pages/Home.jsx";
 
 // ==============================================
 // Frontend conectado a API + Exportar a PDF + Visor de Fotos (modal)
@@ -165,6 +166,13 @@ async function changeOwnPassword(payload) {
     const data = await res.json().catch(()=>({}));
     throw new Error(data?.error || 'No se pudo actualizar la contraseña');
   }
+  return res.json();
+}
+
+async function fetchUsersOverview() {
+  const res = await apiFetch(`/users/overview`);
+  if (res.status === 401) throw new Error('Sesión expirada');
+  if (!res.ok) throw new Error('No se pudo obtener el resumen de usuarios');
   return res.json();
 }
 
@@ -472,9 +480,6 @@ function AppInner() {
     };
   }, []);
 
-  const redirectToDashboard = () => {
-    if (location.pathname !== "/dashboard") navigate("/dashboard", { replace: true });
-  };
   const navLinkClass = ({ isActive }) =>
     `px-3 py-2 rounded-xl text-sm transition ${
       isActive
@@ -491,6 +496,7 @@ function AppInner() {
   const deleteSummaryFn = useCallback((id) => deleteSummaryEntry(id), []);
   const updateSelfProfileFn = useCallback((payload) => updateSelfProfile(payload), []);
   const changePasswordFn = useCallback((payload) => changeOwnPassword(payload), []);
+  const fetchOverviewFn = useCallback(() => fetchUsersOverview(), []);
 
   // NUEVO: visor de fotos
   const [viewer, setViewer] = useState({ open: false, index: 0 });
@@ -507,7 +513,7 @@ function AppInner() {
     window.addEventListener('keydown', onKey); return ()=>window.removeEventListener('keydown', onKey);
   }, [viewer.open, form.fotos?.length]);
   useEffect(()=>{
-    if (location.pathname !== '/' && viewer.open) {
+    if (location.pathname !== '/reportes' && viewer.open) {
       setViewer((v)=>({ ...v, open: false }));
     }
   }, [location.pathname, viewer.open]);
@@ -532,7 +538,7 @@ function AppInner() {
       setCurrentUser(user);
       setAuthError("");
       setUsersExist(true);
-      redirectToDashboard();
+      navigate('/', { replace: true });
     } catch(e) {
       setAuthError(e.message || 'Error');
       try {
@@ -547,7 +553,7 @@ function AppInner() {
       setCurrentUser(user);
       setAuthError("");
       setUsersExist(true);
-      redirectToDashboard();
+      navigate('/', { replace: true });
     } catch(e) {
       setAuthError(e.message || 'Error');
     }
@@ -558,7 +564,7 @@ function AppInner() {
     setForm(emptyReport());
     setItems([]);
     setUsersExist(true);
-    if (location.pathname !== "/") navigate("/", { replace: true });
+    navigate('/', { replace: true });
   };
 
   const handleProfileUpdate = async (payload) => {
@@ -848,7 +854,8 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
               <p className="text-sm text-gray-400">Conectado a API • {API}</p>
             </div>
             <nav className="flex flex-wrap gap-2">
-              <NavLink to="/" className={navLinkClass}>Reportes</NavLink>
+              <NavLink to="/" className={navLinkClass}>Inicio</NavLink>
+              <NavLink to="/reportes" className={navLinkClass}>Reportes</NavLink>
               <NavLink to="/dashboard" className={navLinkClass}>Dashboard</NavLink>
               <NavLink to="/resumen-turno" className={navLinkClass}>Resumen de turno</NavLink>
               <NavLink to="/perfil" className={navLinkClass}>Perfil</NavLink>
@@ -866,7 +873,18 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
         </header>
 
         <Routes>
-          <Route path="/dashboard" element={<Dashboard apiFetch={apiFetch} onAuthError={handleLogout} />} />
+          <Route
+            path="/"
+            element={
+              <Home
+                currentUser={currentUser}
+                onAuthError={handleLogout}
+                onFetchOverview={fetchOverviewFn}
+              />
+            }
+          />
+          <Route path="/reportes" element={reportPage} />
+          <Route path="/dashboard" element={<Dashboard apiFetch={apiFetch} onAuthError={handleLogout} currentUser={currentUser} />} />
           <Route
             path="/resumen-turno"
             element={
@@ -913,7 +931,6 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
                 : <Navigate to="/" replace />
             }
           />
-          <Route path="/" element={reportPage} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

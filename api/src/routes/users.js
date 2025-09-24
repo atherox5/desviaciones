@@ -2,6 +2,8 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import User from '../models/User.js';
+import Report from '../models/Report.js';
+import ShiftSummary from '../models/ShiftSummary.js';
 import { authRequired, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
@@ -50,6 +52,57 @@ router.patch('/me/password', async (req, res) => {
   user.passHash = await bcrypt.hash(newPassword, 12);
   await user.save();
   res.json({ ok: true });
+});
+
+router.get('/overview', async (req, res) => {
+  const users = await User.find({}, { username: 1, fullName: 1, photoUrl: 1, role: 1 }).lean();
+
+  const reportStats = await Report.aggregate([
+    {
+      $group: {
+        _id: '$ownerId',
+        total: { $sum: 1 },
+        concluded: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'concluido'] }, 1, 0],
+          },
+        },
+      },
+    },
+  ]);
+
+  const summaryStats = await ShiftSummary.aggregate([
+    { $group: { _id: '$ownerId', count: { $sum: 1 } } },
+  ]);
+
+  const reportMap = new Map(reportStats.map((it) => [String(it._id), it]));
+  const summaryMap = new Map(summaryStats.map((it) => [String(it._id), it]));
+
+  const data = users.map((user) => {
+    const id = String(user._id);
+    const report = reportMap.get(id) || { total: 0, concluded: 0 };
+    const summary = summaryMap.get(id) || { count: 0 };
+    return {
+      id,
+      username: user.username,
+      fullName: user.fullName || '',
+      photoUrl: user.photoUrl || '',
+      role: user.role,
+      reports: {
+        total: report.total || 0,
+        concluded: report.concluded || 0,
+      },
+      summaries: summary.count || 0,
+    };
+  });
+
+  data.sort((a, b) => {
+    const nameA = a.fullName || a.username;
+    const nameB = b.fullName || b.username;
+    return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+  });
+
+  res.json(data);
 });
 
 router.use(requireAdmin);
