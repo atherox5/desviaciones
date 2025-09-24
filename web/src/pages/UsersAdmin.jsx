@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 
-export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onUpdateUser }) {
+export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onUpdateUser, onDeleteUser }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -73,6 +73,23 @@ export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onU
     }
   }
 
+  async function handleDelete(user) {
+    if (!user) return;
+    if (user.id === currentUser.id) {
+      setError('No puedes eliminar tu propia cuenta');
+      return;
+    }
+    if (!confirm(`¿Eliminar usuario ${user.username}?`)) return;
+    try {
+      await onDeleteUser(user.id);
+      setUsers((prev) => prev.filter((u) => u.id !== user.id));
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'No se pudo eliminar usuario');
+      if ((err.message || '').toLowerCase().includes('expirada')) onAuthError?.();
+    }
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-4 space-y-6 text-gray-100">
       <div>
@@ -100,6 +117,7 @@ export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onU
                 <th className="text-left px-4 py-2">Creado</th>
                 <th className="text-left px-4 py-2">Actualizado</th>
                 <th className="px-4 py-2"></th>
+                <th className="px-4 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
@@ -121,18 +139,27 @@ export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onU
                       Editar
                     </button>
                   </td>
+                  <td className="px-4 py-2 text-right">
+                    <button
+                      onClick={() => handleDelete(user)}
+                      disabled={user.id === currentUser.id}
+                      className="text-xs px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white"
+                    >
+                      Eliminar
+                    </button>
+                  </td>
                 </tr>
               ))}
               {users.length === 0 && !loading && (
                 <tr>
-                  <td className="px-4 py-4 text-center text-gray-400" colSpan={5}>
+                  <td className="px-4 py-4 text-center text-gray-400" colSpan={6}>
                     No hay usuarios para mostrar.
                   </td>
                 </tr>
               )}
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-center text-gray-400" colSpan={5}>
+                  <td className="px-4 py-4 text-center text-gray-400" colSpan={6}>
                     Cargando…
                   </td>
                 </tr>

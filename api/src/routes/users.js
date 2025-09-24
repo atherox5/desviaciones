@@ -50,4 +50,14 @@ router.patch('/:id', async (req, res) => {
   res.json({ id: user._id, username: user.username, role: user.role, createdAt: user.createdAt, updatedAt: user.updatedAt });
 });
 
+router.delete('/:id', async (req, res) => {
+  if (String(req.params.id) === String(req.user.id)) {
+    return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta' });
+  }
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+  await user.deleteOne();
+  res.json({ ok: true });
+});
+
 export default router;

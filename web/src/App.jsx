@@ -137,6 +137,16 @@ async function updateUserProfile(id, payload) {
   return res.json();
 }
 
+async function deleteUserAccount(id) {
+  const res = await apiFetch(`/users/${id}`, { method: 'DELETE' });
+  if (res.status === 401) throw new Error('Sesión expirada');
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data?.error || 'No se pudo eliminar usuario');
+  }
+  return res.json();
+}
+
 // Firma + subida a Cloudinary (si está configurado). Si falla, devolvemos null para cada archivo.
 async function getSignature(folder) {
   const ts = Math.floor(Date.now() / 1000);
@@ -418,6 +428,7 @@ function AppInner() {
 
   const fetchUsersList = useCallback(() => listUsers(), []);
   const updateUserFn = useCallback((id, payload) => updateUserProfile(id, payload), []);
+  const deleteUserFn = useCallback((id) => deleteUserAccount(id), []);
 
   // NUEVO: visor de fotos
   const [viewer, setViewer] = useState({ open: false, index: 0 });
@@ -805,6 +816,7 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
                     onAuthError={handleLogout}
                     onFetchUsers={fetchUsersList}
                     onUpdateUser={updateUserFn}
+                    onDeleteUser={deleteUserFn}
                   />
                 )
                 : <Navigate to="/" replace />
