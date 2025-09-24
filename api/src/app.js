@@ -11,6 +11,7 @@ import authRoutes from './routes/auth.js';
 import reportsRoutes from './routes/reports.js';
 import uploadRoutes from './routes/upload.js';
 import usersRoutes from './routes/users.js';
+import summariesRoutes from './routes/summaries.js';
 
 const app = express();
 
@@ -54,6 +55,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/summaries', summariesRoutes);
 
 /** 404 */
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));

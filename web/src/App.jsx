@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from "react-router-dom";
 import Dashboard from "./pages/Dashboard.jsx";
 import UsersAdmin from "./pages/UsersAdmin.jsx";
+import ShiftSummary from "./pages/ShiftSummary.jsx";
 
 // ==============================================
 // Frontend conectado a API + Exportar a PDF + Visor de Fotos (modal)
@@ -147,6 +148,37 @@ async function deleteUserAccount(id) {
   return res.json();
 }
 
+async function listSummaries(params = {}) {
+  const q = new URLSearchParams();
+  if (params.from) q.set('from', params.from);
+  if (params.to) q.set('to', params.to);
+  if (params.owner) q.set('owner', params.owner);
+  const res = await apiFetch(`/summaries?${q.toString()}`);
+  if (res.status === 401) throw new Error('Sesión expirada');
+  if (!res.ok) throw new Error('No se pudo cargar el resumen');
+  return res.json();
+}
+
+async function createSummaryEntry(payload) {
+  const res = await apiFetch(`/summaries`, { method: 'POST', body: JSON.stringify(payload) });
+  if (res.status === 401) throw new Error('Sesión expirada');
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data?.error || 'No se pudo crear la novedad');
+  }
+  return res.json();
+}
+
+async function deleteSummaryEntry(id) {
+  const res = await apiFetch(`/summaries/${id}`, { method: 'DELETE' });
+  if (res.status === 401) throw new Error('Sesión expirada');
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data?.error || 'No se pudo eliminar la novedad');
+  }
+  return res.json();
+}
+
 // Firma + subida a Cloudinary (si está configurado). Si falla, devolvemos null para cada archivo.
 async function getSignature(folder) {
   const ts = Math.floor(Date.now() / 1000);
@@ -280,8 +312,8 @@ function LoginScreen({ usersExist, onSetupAdmin, onLogin, onRegister, error }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   return (
-    <div className="max-w-md mx-auto bg-gray-900/60 border border-gray-800 rounded-2xl p-6">
-      <div className="flex items-center gap-2 mb-4">
+    <div className="max-w-md mx-auto bg-gray-900/60 border border-gray-800 rounded-2xl p-6 text-center">
+      <div className="flex items-center justify-center gap-2 mb-4">
         {!usersExist && (
           <button className={`px-3 py-1.5 rounded-lg text-sm ${tab==='setup'? 'bg-indigo-600 text-white':'bg-gray-800 text-gray-200'}`} onClick={()=>setTab('setup')}>Configurar admin</button>
         )}
@@ -289,8 +321,8 @@ function LoginScreen({ usersExist, onSetupAdmin, onLogin, onRegister, error }) {
         <button className={`px-3 py-1.5 rounded-lg text-sm ${tab==='register'? 'bg-indigo-600 text-white':'bg-gray-800 text-gray-200'}`} onClick={()=>setTab('register')}>Registrarse</button>
       </div>
       {error && <div className="mb-3 text-sm text-red-400">{error}</div>}
-      <Campo label="Usuario" required><TextInput value={username} onChange={(e)=>setUsername(e.target.value)} /></Campo>
-      <Campo label="Contraseña" required><TextInput type="password" value={password} onChange={(e)=>setPassword(e.target.value)} /></Campo>
+      <Campo label="Usuario" required><TextInput value={username} onChange={(e)=>setUsername(e.target.value)} className="text-center" /></Campo>
+      <Campo label="Contraseña" required><TextInput type="password" value={password} onChange={(e)=>setPassword(e.target.value)} className="text-center" /></Campo>
       {tab==='setup' && <button onClick={()=>onSetupAdmin(username,password)} className="w-full px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm">Crear superusuario</button>}
       {tab==='login' && <button onClick={()=>onLogin(username,password)} className="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Entrar</button>}
       {tab==='register' && <button onClick={()=>onRegister(username,password)} className="w-full px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm">Crear cuenta (usuario)</button>}
@@ -429,6 +461,9 @@ function AppInner() {
   const fetchUsersList = useCallback(() => listUsers(), []);
   const updateUserFn = useCallback((id, payload) => updateUserProfile(id, payload), []);
   const deleteUserFn = useCallback((id) => deleteUserAccount(id), []);
+  const listSummariesFn = useCallback((params) => listSummaries(params), []);
+  const createSummaryFn = useCallback((payload) => createSummaryEntry(payload), []);
+  const deleteSummaryFn = useCallback((id) => deleteSummaryEntry(id), []);
 
   // NUEVO: visor de fotos
   const [viewer, setViewer] = useState({ open: false, index: 0 });
@@ -594,9 +629,9 @@ function AppInner() {
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-gray-100 flex items-center">
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-gray-100 flex items-center justify-center text-center">
         <div className="max-w-4xl w-full mx-auto p-6">
-          <h1 className="text-2xl font-bold text-white mb-4">Reporte de Desviaciones</h1>
+          <h1 className="text-3xl font-bold text-white mb-4">Reporte de Desviaciones</h1>
           <LoginScreen
             usersExist={usersExist}
             onSetupAdmin={handleSetupAdmin}
@@ -791,6 +826,7 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
             <nav className="flex flex-wrap gap-2">
               <NavLink to="/" className={navLinkClass}>Reportes</NavLink>
               <NavLink to="/dashboard" className={navLinkClass}>Dashboard</NavLink>
+              <NavLink to="/resumen-turno" className={navLinkClass}>Resumen de turno</NavLink>
               {currentUser.role === 'admin' && (
                 <NavLink to="/usuarios" className={navLinkClass}>Usuarios</NavLink>
               )}
@@ -806,6 +842,22 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
 
         <Routes>
           <Route path="/dashboard" element={<Dashboard apiFetch={apiFetch} onAuthError={handleLogout} />} />
+          <Route
+            path="/resumen-turno"
+            element={
+              <ShiftSummary
+                currentUser={currentUser}
+                areas={AREAS}
+                onAuthError={handleLogout}
+                onFetchSummaries={listSummariesFn}
+                onCreateSummary={createSummaryFn}
+                onDeleteSummary={deleteSummaryFn}
+                onUploadSignature={getSignature}
+                onUploadFiles={uploadToCloudinary}
+                dataURLFromURL={dataURLFromURL}
+              />
+            }
+          />
           <Route
             path="/usuarios"
             element={

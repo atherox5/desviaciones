@@ -1,0 +1,407 @@
+import { useEffect, useMemo, useState } from 'react';
+
+const pad2 = (n) => (n < 10 ? `0${n}` : `${n}`);
+const hoyISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+function startOfWeek(date = new Date()) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // ajusta para lunes
+  const monday = new Date(d.setDate(diff));
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+function endOfWeek(date = new Date()) {
+  const monday = startOfWeek(date);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return sunday;
+}
+
+const toISODate = (date) => {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+function formatDisplayDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString();
+}
+
+function TextInput(props) {
+  return <input {...props} className={`w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 ${props.className || ''}`} />;
+}
+
+function TextArea(props) {
+  return <textarea {...props} className={`w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[96px] disabled:opacity-60 ${props.className || ''}`} />;
+}
+
+function Select(props) {
+  return <select {...props} className={`w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 ${props.className || ''}`}>{props.children}</select>;
+}
+
+function Label({ title, children, required }) {
+  return (
+    <label className="block text-left">
+      <span className="block text-sm text-gray-300 mb-1">{title}{required && <span className="text-red-400"> *</span>}</span>
+      {children}
+    </label>
+  );
+}
+
+export default function ShiftSummary({
+  currentUser,
+  areas,
+  onAuthError,
+  onFetchSummaries,
+  onCreateSummary,
+  onDeleteSummary,
+  onUploadSignature,
+  onUploadFiles,
+  dataURLFromURL,
+}) {
+  const areaOptions = Array.isArray(areas) ? areas : [];
+  const monday = useMemo(() => startOfWeek(), []);
+  const sunday = useMemo(() => endOfWeek(), []);
+
+  const [fromDate, setFromDate] = useState(toISODate(monday));
+  const [toDate, setToDate] = useState(toISODate(sunday));
+
+  const [form, setForm] = useState({ fecha: hoyISO(), area: '', novedades: '', fotos: [] });
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      await loadEntries();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromDate, toDate]);
+
+  async function loadEntries() {
+    setLoading(true);
+    try {
+      const data = await onFetchSummaries({ from: fromDate, to: toDate });
+      setEntries(Array.isArray(data) ? data : []);
+      setError('');
+    } catch (e) {
+      console.error(e);
+      setError(e.message || 'No se pudieron cargar las novedades');
+      if ((e.message || '').toLowerCase().includes('expirada')) onAuthError?.();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleFilesSelected(fileList) {
+    if (!fileList?.length) return;
+    setUploading(true);
+    try {
+      const folder = `resumen/${currentUser?.username || 'anon'}`;
+      const sig = await onUploadSignature(folder);
+      if (sig && sig.cloudName && sig.apiKey && sig.signature) {
+        const urls = await onUploadFiles(Array.from(fileList), sig);
+        const fotos = urls.filter(Boolean).map((url) => ({ url, nota: '' }));
+        if (fotos.length) {
+          setForm((prev) => ({ ...prev, fotos: [...(prev.fotos || []), ...fotos] }));
+        } else {
+          alert('No se pudieron subir las imágenes (Cloudinary).');
+        }
+      } else {
+        for (const file of fileList) {
+          const data = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(file);
+          });
+          setForm((prev) => ({ ...prev, fotos: [...(prev.fotos || []), { url: String(data), nota: '(local: no se guardará)' }] }));
+        }
+        alert('Cloudinary no está configurado: las fotos se mostrarán localmente y no se guardarán en la base de datos.');
+      }
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function updateFotoNota(idx, nota) {
+    setForm((prev) => {
+      const copy = [...(prev.fotos || [])];
+      copy[idx] = { ...copy[idx], nota };
+      return { ...prev, fotos: copy };
+    });
+  }
+
+  function removeFoto(idx) {
+    setForm((prev) => {
+      const copy = [...(prev.fotos || [])];
+      copy.splice(idx, 1);
+      return { ...prev, fotos: copy };
+    });
+  }
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    if (!form.area) {
+      setError('Selecciona un área');
+      return;
+    }
+    if (!form.novedades || form.novedades.trim().length < 5) {
+      setError('Describe las novedades (mínimo 5 caracteres).');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        fecha: form.fecha,
+        area: form.area,
+        novedades: form.novedades,
+        fotos: (form.fotos || []).filter((f) => typeof f.url === 'string' && f.url.startsWith('http')),
+      };
+
+      if (form.fotos?.some((f) => f.url?.startsWith('data:'))) {
+        alert('Las fotos locales no se guardarán en la base de datos mientras no esté configurado Cloudinary.');
+      }
+
+      const created = await onCreateSummary(payload);
+      setForm({ fecha: hoyISO(), area: '', novedades: '', fotos: [] });
+      setEntries((prev) => [created, ...prev]);
+      setError('');
+    } catch (e) {
+      console.error(e);
+      setError(e.message || 'No se pudo registrar la novedad');
+      if ((e.message || '').toLowerCase().includes('expirada')) onAuthError?.();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(entry) {
+    if (!entry) return;
+    if (!confirm(`¿Eliminar novedad del ${entry.fecha} - ${entry.area}?`)) return;
+    try {
+      await onDeleteSummary(entry._id);
+      setEntries((prev) => prev.filter((it) => it._id !== entry._id));
+    } catch (e) {
+      console.error(e);
+      setError(e.message || 'No se pudo eliminar la novedad');
+      if ((e.message || '').toLowerCase().includes('expirada')) onAuthError?.();
+    }
+  }
+
+  const sortedEntries = useMemo(() => {
+    return [...entries].sort((a, b) => {
+      if (a.fecha === b.fecha) return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      return a.fecha > b.fecha ? -1 : 1;
+    });
+  }, [entries]);
+
+  async function exportPDF() {
+    if (!entries?.length) {
+      alert('No hay novedades para exportar.');
+      return;
+    }
+    const { default: jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const margin = 48;
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    let y = margin;
+
+    const addLine = (text, opts = {}) => {
+      const size = opts.size || 12;
+      const bold = opts.bold || false;
+      doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      doc.setFontSize(size);
+      const lines = doc.splitTextToSize(text, pageW - margin * 2);
+      for (const line of lines) {
+        if (y > pageH - margin) {
+          doc.addPage();
+          y = margin;
+        }
+        doc.text(line, margin, y);
+        y += opts.leading || 16;
+      }
+    };
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.text('Resumen semanal de novedades', margin, y);
+    y += 28;
+
+    addLine(`Generado por: ${currentUser?.username || '—'}`, { bold: true, size: 12, leading: 18 });
+    addLine(`Fecha de creación: ${new Date().toLocaleString()}`, { size: 12, leading: 18 });
+    addLine(`Período: ${formatDisplayDate(fromDate)} al ${formatDisplayDate(toDate)}`, { size: 12, leading: 20 });
+    y += 6;
+
+    const grouped = [...entries].sort((a, b) => (a.fecha === b.fecha ? a.area.localeCompare(b.area) : a.fecha.localeCompare(b.fecha)));
+
+    for (const entry of grouped) {
+      if (y > pageH - margin - 120) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.text(`${formatDisplayDate(entry.fecha)} · ${entry.area}`, margin, y);
+      y += 18;
+
+      addLine(`Registrado por: ${entry.ownerName || currentUser?.username || '—'}`, { size: 11, leading: 16 });
+      addLine(entry.novedades || '—', { size: 11, leading: 16 });
+      y += 6;
+
+      if (entry.fotos?.length) {
+        const cellW = (pageW - margin * 2 - 20) / 3;
+        const cellH = 110;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text('Registro fotográfico:', margin, y);
+        y += 16;
+
+        for (let i = 0; i < entry.fotos.length; i++) {
+          if (y > pageH - margin - cellH) {
+            doc.addPage();
+            y = margin;
+          }
+          const col = i % 3;
+          if (col === 0 && i > 0) y += cellH + 20;
+          const x = margin + col * (cellW + 10);
+          const foto = entry.fotos[i];
+          const dataUrl = await dataURLFromURL(foto.url);
+          if (dataUrl) {
+            try {
+              doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST');
+            } catch (error) {
+              try {
+                doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST');
+              } catch {
+                // ignore if fails
+              }
+            }
+          }
+        }
+        y += cellH + 30;
+      }
+    }
+
+    const fileName = `resumen_${fromDate}_al_${toDate}.pdf`.replace(/[^A-Za-z0-9_\-]/g, '_');
+    doc.save(fileName);
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto p-4 space-y-6 text-gray-100">
+      <header className="space-y-1 text-center">
+        <h1 className="text-2xl font-bold text-white">Resumen de turno</h1>
+        <p className="text-sm text-gray-400">Registra novedades diarias por área y genera un documento semanal.</p>
+      </header>
+
+      {error && (
+        <div className="bg-red-900/40 text-red-200 border border-red-700/60 rounded-xl px-4 py-2 text-sm text-center">
+          {error}
+        </div>
+      )}
+
+      <section className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5">
+        <h2 className="text-lg font-semibold text-white mb-4 text-center">Nueva novedad</h2>
+        <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Label title="Fecha" required>
+            <TextInput type="date" value={form.fecha} onChange={(e) => setForm((prev) => ({ ...prev, fecha: e.target.value }))} required />
+          </Label>
+          <Label title="Área" required>
+            <Select value={form.area} onChange={(e) => setForm((prev) => ({ ...prev, area: e.target.value }))} required>
+              <option value="">Seleccione área…</option>
+              {areaOptions.map((area) => (
+                <option key={area} value={area}>{area}</option>
+              ))}
+            </Select>
+          </Label>
+          <div className="md:col-span-2">
+            <Label title="Novedades / hallazgos" required>
+              <TextArea value={form.novedades} onChange={(e) => setForm((prev) => ({ ...prev, novedades: e.target.value }))} placeholder="Describe las novedades del turno…" required />
+            </Label>
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm text-gray-300 mb-1">Registro fotográfico</label>
+            <input type="file" multiple accept="image/*" onChange={(e) => { handleFilesSelected(e.target.files); e.target.value = ''; }} className="w-full text-sm text-gray-300" />
+            {uploading && <p className="text-xs text-gray-400 mt-2">Subiendo archivos…</p>}
+            {form.fotos?.length > 0 && (
+              <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {form.fotos.map((foto, idx) => (
+                  <div key={idx} className="bg-gray-800/60 border border-gray-700 rounded-xl overflow-hidden">
+                    <img src={foto.url} alt={`Foto ${idx + 1}`} className="w-full h-40 object-cover" />
+                    <div className="p-2 space-y-2">
+                      <TextInput value={foto.nota || ''} onChange={(e) => updateFotoNota(idx, e.target.value)} placeholder="Nota" />
+                      <button type="button" onClick={() => removeFoto(idx)} className="w-full text-xs bg-red-600 hover:bg-red-500 text-white rounded-lg py-1">Eliminar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="md:col-span-2 flex justify-end">
+            <button type="submit" disabled={saving} className={`px-4 py-2 rounded-xl text-sm ${saving ? 'bg-emerald-600/60 text-white/70 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}>
+              {saving ? 'Guardando…' : 'Agregar al resumen'}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Historial del periodo</h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <div>
+              <label className="block text-xs text-gray-400 uppercase font-semibold mb-1">Desde</label>
+              <TextInput type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 uppercase font-semibold mb-1">Hasta</label>
+              <TextInput type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+            </div>
+            <button onClick={loadEntries} className="px-3 py-2 rounded-xl bg-gray-700 hover:bg-gray-600 text-sm text-white">Actualizar</button>
+            <button onClick={exportPDF} className="px-3 py-2 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-sm text-white">Generar PDF</button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="text-sm text-gray-400">Cargando novedades…</div>
+        ) : sortedEntries.length === 0 ? (
+          <div className="text-sm text-gray-400">No hay registros en el rango seleccionado.</div>
+        ) : (
+          <div className="space-y-3">
+            {sortedEntries.map((entry) => (
+              <article key={entry._id} className="bg-gray-800/60 border border-gray-700 rounded-2xl p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-white font-semibold text-base">{entry.area}</h3>
+                    <p className="text-xs text-gray-400">{formatDisplayDate(entry.fecha)} · {entry.ownerName || currentUser?.username || '—'}</p>
+                  </div>
+                  <button onClick={() => handleDelete(entry)} className="text-xs bg-red-600 hover:bg-red-500 text-white rounded-lg px-3 py-1">Eliminar</button>
+                </div>
+                <p className="text-sm text-gray-200 mt-3 whitespace-pre-wrap">{entry.novedades}</p>
+                {entry.fotos?.length > 0 && (
+                  <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {entry.fotos.map((foto, idx) => (
+                      <figure key={idx} className="bg-gray-900/40 border border-gray-700 rounded-xl overflow-hidden">
+                        <img src={foto.url} alt={`Foto ${idx + 1}`} className="w-full h-32 object-cover" />
+                        {foto.nota && <figcaption className="text-xs text-gray-300 px-2 py-1">{foto.nota}</figcaption>}
+                      </figure>
+                    ))}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
