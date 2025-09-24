@@ -11,6 +11,7 @@ const fotoZ = z.object({ url: z.string().url(), nota: z.string().optional().defa
 const summaryZ = z.object({
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   area: z.string().min(2),
+  ubicacion: z.string().optional().default(''),
   novedades: z.string().min(3),
   fotos: z.array(fotoZ).optional().default([]),
 });

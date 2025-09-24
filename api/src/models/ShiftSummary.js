@@ -9,6 +9,7 @@ const ShiftSummarySchema = new mongoose.Schema(
   {
     fecha: { type: String, required: true }, // YYYY-MM-DD
     area: { type: String, required: true },
+    ubicacion: { type: String, default: '' },
     novedades: { type: String, required: true },
     fotos: { type: [FotoSchema], default: [] },
     ownerId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },

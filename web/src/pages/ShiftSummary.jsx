@@ -73,7 +73,7 @@ export default function ShiftSummary({
   const [fromDate, setFromDate] = useState(toISODate(monday));
   const [toDate, setToDate] = useState(toISODate(sunday));
 
-  const [form, setForm] = useState({ fecha: hoyISO(), area: '', novedades: '', fotos: [] });
+  const [form, setForm] = useState({ fecha: hoyISO(), area: '', ubicacion: '', novedades: '', fotos: [] });
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -163,6 +163,7 @@ export default function ShiftSummary({
       const payload = {
         fecha: form.fecha,
         area: form.area,
+        ubicacion: form.ubicacion || '',
         novedades: form.novedades,
         fotos: (form.fotos || []).filter((f) => typeof f.url === 'string' && f.url.startsWith('http')),
       };
@@ -172,7 +173,7 @@ export default function ShiftSummary({
       }
 
       const created = await onCreateSummary(payload);
-      setForm({ fecha: hoyISO(), area: '', novedades: '', fotos: [] });
+      setForm({ fecha: hoyISO(), area: '', ubicacion: '', novedades: '', fotos: [] });
       setEntries((prev) => [created, ...prev]);
       setError('');
     } catch (e) {
@@ -199,10 +200,23 @@ export default function ShiftSummary({
 
   const sortedEntries = useMemo(() => {
     return [...entries].sort((a, b) => {
+      if ((a.ubicacion || '') !== (b.ubicacion || '')) {
+        return (a.ubicacion || '').localeCompare(b.ubicacion || '');
+      }
       if (a.fecha === b.fecha) return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
       return a.fecha > b.fecha ? -1 : 1;
     });
   }, [entries]);
+
+  const groupedByLocation = useMemo(() => {
+    const map = new Map();
+    for (const entry of sortedEntries) {
+      const key = entry.ubicacion?.trim() || 'Sin ubicación específica';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(entry);
+    }
+    return Array.from(map.entries());
+  }, [sortedEntries]);
 
   async function exportPDF() {
     if (!entries?.length) {
@@ -232,37 +246,48 @@ export default function ShiftSummary({
       }
     };
 
+    const title = `Resumen semanal de novedades (${formatDisplayDate(fromDate)} – ${formatDisplayDate(toDate)})`;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(20);
-    doc.text('Resumen semanal de novedades', margin, y);
-    y += 28;
+    doc.setFontSize(12);
+    doc.text(title, margin, y);
+    y += 20;
 
-    addLine(`Generado por: ${currentUser?.username || '—'}`, { bold: true, size: 12, leading: 18 });
-    addLine(`Fecha de creación: ${new Date().toLocaleString()}`, { size: 12, leading: 18 });
-    addLine(`Período: ${formatDisplayDate(fromDate)} al ${formatDisplayDate(toDate)}`, { size: 12, leading: 20 });
+    addLine(`Generado por: ${currentUser?.username || '—'}`, { bold: true, size: 10, leading: 16 });
+    addLine(`Fecha de creación: ${new Date().toLocaleString()}`, { size: 10, leading: 16 });
     y += 6;
 
-    const grouped = [...entries].sort((a, b) => (a.fecha === b.fecha ? a.area.localeCompare(b.area) : a.fecha.localeCompare(b.fecha)));
-
-    for (const entry of grouped) {
-      if (y > pageH - margin - 120) {
+    for (const [ubicacionLabel, items] of groupedByLocation) {
+      if (y > pageH - margin - 80) {
         doc.addPage();
         y = margin;
       }
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(14);
-      doc.text(`${formatDisplayDate(entry.fecha)} · ${entry.area}`, margin, y);
+      doc.setFontSize(11);
+      doc.text(`Ubicación: ${ubicacionLabel}`, margin, y);
       y += 18;
 
-      addLine(`Registrado por: ${entry.ownerName || currentUser?.username || '—'}`, { size: 11, leading: 16 });
-      addLine(entry.novedades || '—', { size: 11, leading: 16 });
-      y += 6;
+      for (const entry of items) {
+        if (y > pageH - margin - 120) {
+          doc.addPage();
+          y = margin;
+        }
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text(`${formatDisplayDate(entry.fecha)} · ${entry.area}`, margin, y);
+        y += 16;
 
-      if (entry.fotos?.length) {
+        addLine(`Registrado por: ${entry.ownerName || currentUser?.username || '—'}`, { size: 10, leading: 14 });
+        if (entry.ubicacion) {
+          addLine(`Ubicación específica: ${entry.ubicacion}`, { size: 10, leading: 14 });
+        }
+        addLine(entry.novedades || '—', { size: 10, leading: 14 });
+        y += 6;
+
+        if (entry.fotos?.length) {
         const cellW = (pageW - margin * 2 - 20) / 3;
         const cellH = 110;
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
+        doc.setFontSize(9);
         doc.text('Registro fotográfico:', margin, y);
         y += 16;
 
@@ -288,7 +313,9 @@ export default function ShiftSummary({
             }
           }
         }
-        y += cellH + 30;
+        y += cellH + 26;
+        }
+        y += 10;
       }
     }
 
@@ -323,6 +350,11 @@ export default function ShiftSummary({
               ))}
             </Select>
           </Label>
+          <div className="md:col-span-2">
+            <Label title="Ubicación específica">
+              <TextInput value={form.ubicacion} onChange={(e) => setForm((prev) => ({ ...prev, ubicacion: e.target.value }))} placeholder="Ej: Planta norte, Patio 3…" />
+            </Label>
+          </div>
           <div className="md:col-span-2">
             <Label title="Novedades / hallazgos" required>
               <TextArea value={form.novedades} onChange={(e) => setForm((prev) => ({ ...prev, novedades: e.target.value }))} placeholder="Describe las novedades del turno…" required />
@@ -376,28 +408,36 @@ export default function ShiftSummary({
         ) : sortedEntries.length === 0 ? (
           <div className="text-sm text-gray-400">No hay registros en el rango seleccionado.</div>
         ) : (
-          <div className="space-y-3">
-            {sortedEntries.map((entry) => (
-              <article key={entry._id} className="bg-gray-800/60 border border-gray-700 rounded-2xl p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-white font-semibold text-base">{entry.area}</h3>
-                    <p className="text-xs text-gray-400">{formatDisplayDate(entry.fecha)} · {entry.ownerName || currentUser?.username || '—'}</p>
-                  </div>
-                  <button onClick={() => handleDelete(entry)} className="text-xs bg-red-600 hover:bg-red-500 text-white rounded-lg px-3 py-1">Eliminar</button>
-                </div>
-                <p className="text-sm text-gray-200 mt-3 whitespace-pre-wrap">{entry.novedades}</p>
-                {entry.fotos?.length > 0 && (
-                  <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {entry.fotos.map((foto, idx) => (
-                      <figure key={idx} className="bg-gray-900/40 border border-gray-700 rounded-xl overflow-hidden">
-                        <img src={foto.url} alt={`Foto ${idx + 1}`} className="w-full h-32 object-cover" />
-                        {foto.nota && <figcaption className="text-xs text-gray-300 px-2 py-1">{foto.nota}</figcaption>}
-                      </figure>
-                    ))}
-                  </div>
-                )}
-              </article>
+          <div className="space-y-5">
+            {groupedByLocation.map(([ubicacionLabel, items]) => (
+              <div key={ubicacionLabel} className="space-y-3">
+                <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">{ubicacionLabel}</h3>
+                {items.map((entry) => (
+                  <article key={entry._id} className="bg-gray-800/60 border border-gray-700 rounded-2xl p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-white font-semibold text-base">{entry.area}</h4>
+                        <p className="text-xs text-gray-400">{formatDisplayDate(entry.fecha)} · {entry.ownerName || currentUser?.username || '—'}</p>
+                      </div>
+                      <button onClick={() => handleDelete(entry)} className="text-xs bg-red-600 hover:bg-red-500 text-white rounded-lg px-3 py-1">Eliminar</button>
+                    </div>
+                    {entry.ubicacion && (
+                      <p className="text-xs text-gray-400 mt-2">Ubicación: {entry.ubicacion}</p>
+                    )}
+                    <p className="text-sm text-gray-200 mt-3 whitespace-pre-wrap">{entry.novedades}</p>
+                    {entry.fotos?.length > 0 && (
+                      <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {entry.fotos.map((foto, idx) => (
+                          <figure key={idx} className="bg-gray-900/40 border border-gray-700 rounded-xl overflow-hidden">
+                            <img src={foto.url} alt={`Foto ${idx + 1}`} className="w-full h-32 object-cover" />
+                            {foto.nota && <figcaption className="text-xs text-gray-300 px-2 py-1">{foto.nota}</figcaption>}
+                          </figure>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
             ))}
           </div>
         )}
