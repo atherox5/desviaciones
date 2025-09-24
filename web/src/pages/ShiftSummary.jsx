@@ -119,6 +119,7 @@ export default function ShiftSummary({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const locationOptions = AREA_LOCATIONS[form.area] || null;
+  const canEditDetails = Boolean(form.area) && (!locationOptions || Boolean(form.ubicacion));
 
   useEffect(() => {
     setForm((prev) => {
@@ -205,6 +206,10 @@ export default function ShiftSummary({
     }
     if (locationOptions && !form.ubicacion) {
       setError('Selecciona una ubicación específica');
+      return;
+    }
+    if (!canEditDetails) {
+      setError('Completa el área y ubicación antes de registrar.');
       return;
     }
     if (!form.novedades || form.novedades.trim().length < 5) {
@@ -423,12 +428,28 @@ export default function ShiftSummary({
           </div>
           <div className="md:col-span-2">
             <Label title="Novedades / hallazgos" required>
-              <TextArea value={form.novedades} onChange={(e) => setForm((prev) => ({ ...prev, novedades: e.target.value }))} placeholder="Describe las novedades del turno…" required />
+              <TextArea
+                value={form.novedades}
+                onChange={(e) => setForm((prev) => ({ ...prev, novedades: e.target.value }))}
+                placeholder={canEditDetails ? 'Describe las novedades del turno…' : 'Selecciona área y ubicación para habilitar'}
+                required
+                disabled={!canEditDetails}
+              />
             </Label>
           </div>
           <div className="md:col-span-2">
             <label className="block text-sm text-gray-300 mb-1">Registro fotográfico</label>
-            <input type="file" multiple accept="image/*" onChange={(e) => { handleFilesSelected(e.target.files); e.target.value = ''; }} className="w-full text-sm text-gray-300" />
+            <input
+              type="file"
+              multiple
+              accept="image/*"
+              disabled={!canEditDetails}
+              onChange={(e) => {
+                handleFilesSelected(e.target.files);
+                e.target.value = '';
+              }}
+              className="w-full text-sm text-gray-300 disabled:opacity-60"
+            />
             {uploading && <p className="text-xs text-gray-400 mt-2">Subiendo archivos…</p>}
             {form.fotos?.length > 0 && (
               <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -445,7 +466,7 @@ export default function ShiftSummary({
             )}
           </div>
           <div className="md:col-span-2 flex justify-end">
-            <button type="submit" disabled={saving} className={`px-4 py-2 rounded-xl text-sm ${saving ? 'bg-emerald-600/60 text-white/70 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}>
+            <button type="submit" disabled={saving || !canEditDetails} className={`px-4 py-2 rounded-xl text-sm ${(saving || !canEditDetails) ? 'bg-emerald-600/60 text-white/70 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}>
               {saving ? 'Guardando…' : 'Agregar al resumen'}
             </button>
           </div>
