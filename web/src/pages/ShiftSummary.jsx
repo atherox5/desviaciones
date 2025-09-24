@@ -46,6 +46,45 @@ function Select(props) {
   return <select {...props} className={`w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 ${props.className || ''}`}>{props.children}</select>;
 }
 
+const AREA_LOCATIONS = {
+  Aguas: [
+    'Área 410',
+    'Estación Fija',
+    'Dren Quillayes',
+    'Choapa 1',
+    'Choapa2',
+    'Choapa 3',
+    'Recirculación 2',
+    'Acueducto',
+    'Sentina Muro de cola',
+    'Pozos 7 y 8 Cuncumen',
+    'Cubeta',
+    'Bocatomas',
+    'Rios',
+    'Otros',
+    'Pozos ABQ.',
+  ],
+  STR: [
+    'Novedades reelevantes',
+    'Harneros lineales y válvulas de dardo',
+    'Bombas de impulsión de relaves y agua de sello STR 36"',
+    "Válvulas STR 36\" y ZM's",
+    'Estanques y Agitadores TK-002 / 003',
+    'Estanque y Agitador TK-1004',
+    'Válvulas STR 28"',
+    'Bombas de impulsión de relaves y agua de sello STR 28"',
+    'Cajón y bomba de recuperación de agua de rechazo harneros',
+  ],
+  STC: [
+    'Novedades relevantes',
+    'Bombas PD (Geho), centrífugas de carga y válvulas compresores',
+    'Estanques y agitadores TK-020 / 021 PP007 ST-015 ST-500',
+    'Estaanques TK-115 / 116 PP225/226/227',
+    'Piscinas de emergencias',
+    'Bombas de descarga TK-711',
+  ],
+};
+
 function Label({ title, children, required }) {
   return (
     <label className="block text-left">
@@ -79,6 +118,16 @@ export default function ShiftSummary({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const locationOptions = AREA_LOCATIONS[form.area] || null;
+
+  useEffect(() => {
+    setForm((prev) => {
+      const options = AREA_LOCATIONS[prev.area] || null;
+      if (!options) return prev;
+      if (options.includes(prev.ubicacion)) return prev;
+      return { ...prev, ubicacion: '' };
+    });
+  }, [form.area]);
 
   useEffect(() => {
     (async () => {
@@ -152,6 +201,10 @@ export default function ShiftSummary({
     e.preventDefault();
     if (!form.area) {
       setError('Selecciona un área');
+      return;
+    }
+    if (locationOptions && !form.ubicacion) {
+      setError('Selecciona una ubicación específica');
       return;
     }
     if (!form.novedades || form.novedades.trim().length < 5) {
@@ -352,7 +405,16 @@ export default function ShiftSummary({
           </Label>
           <div className="md:col-span-2">
             <Label title="Ubicación específica">
-              <TextInput value={form.ubicacion} onChange={(e) => setForm((prev) => ({ ...prev, ubicacion: e.target.value }))} placeholder="Ej: Planta norte, Patio 3…" />
+              {locationOptions ? (
+                <Select value={form.ubicacion} onChange={(e) => setForm((prev) => ({ ...prev, ubicacion: e.target.value }))} required>
+                  <option value="">Seleccione ubicación…</option>
+                  {locationOptions.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </Select>
+              ) : (
+                <TextInput value={form.ubicacion} onChange={(e) => setForm((prev) => ({ ...prev, ubicacion: e.target.value }))} placeholder="Ej: Planta norte, Patio 3…" />
+              )}
             </Label>
           </div>
           <div className="md:col-span-2">
