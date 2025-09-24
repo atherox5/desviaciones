@@ -64,13 +64,19 @@ router.post('/', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
-  const item = await ShiftSummary.findById(req.params.id);
-  if (!item) return res.status(404).json({ error: 'No encontrado' });
-  const isOwner = String(item.ownerId) === String(req.user.id);
-  const isAdmin = req.user.role === 'admin';
-  if (!isOwner && !isAdmin) return res.status(403).json({ error: 'Forbidden' });
-  await item.deleteOne();
-  res.json({ ok: true });
+  try {
+    const item = await ShiftSummary.findById(req.params.id);
+    if (!item) return res.status(404).json({ error: 'No encontrado' });
+    const isOwner = String(item.ownerId) === String(req.user.id);
+    const isAdmin = req.user.role === 'admin';
+    if (!isOwner && !isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+    await ShiftSummary.deleteOne({ _id: item._id });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[DELETE /summaries/:id] error:', err);
+    res.status(500).json({ error: 'No se pudo eliminar la novedad' });
+  }
 });
 
 export default router;
