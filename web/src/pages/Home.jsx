@@ -39,14 +39,16 @@ export default function Home({ currentUser, onAuthError, onFetchOverview }) {
     })();
   }, [onFetchOverview, onAuthError, currentUser?.id]);
 
+  const visibleItems = useMemo(() => items.filter((it) => it.role !== 'admin'), [items]);
+
   const totals = useMemo(() => {
-    return items.reduce((acc, it) => {
+    return visibleItems.reduce((acc, it) => {
       acc.reports += it.reports?.total || 0;
       acc.concluded += it.reports?.concluded || 0;
       acc.summaries += it.summaries || 0;
       return acc;
     }, { reports: 0, concluded: 0, summaries: 0 });
-  }, [items]);
+  }, [visibleItems]);
 
   return (
     <div className="max-w-7xl mx-auto p-4 space-y-6 text-gray-100">
@@ -82,7 +84,7 @@ export default function Home({ currentUser, onAuthError, onFetchOverview }) {
         <div className="text-sm text-gray-400">Cargando información…</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {items.map((user) => {
+          {visibleItems.map((user) => {
             const total = user.reports?.total || 0;
             const concluded = user.reports?.concluded || 0;
             const percent = total ? Math.round((concluded * 1000) / total) / 10 : 0;
@@ -112,6 +114,9 @@ export default function Home({ currentUser, onAuthError, onFetchOverview }) {
             );
           })}
           {items.length === 0 && !loading && (
+            <div className="text-sm text-gray-400 col-span-full">No hay usuarios registrados.</div>
+          )}
+          {items.length > 0 && visibleItems.length === 0 && !loading && (
             <div className="text-sm text-gray-400 col-span-full">No hay usuarios registrados.</div>
           )}
         </div>
