@@ -401,8 +401,18 @@ export default function ShiftSummary({
       doc.text(`${ubicacionLabel}`, margin, y);
       y += 14;
 
+      let lastDate = null;
       for (const entry of items) {
         ensureSpace(70);
+        const currentDateLabel = entry.fecha ? formatDisplayDate(entry.fecha) : '';
+        if (currentDateLabel && currentDateLabel !== lastDate) {
+          ensureSpace(20);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.text(currentDateLabel, margin + 4, y);
+          y += 12;
+          lastDate = currentDateLabel;
+        }
         addLine(entry.novedades || '—', { size: 8, leading: 11 });
         y += 8;
 
