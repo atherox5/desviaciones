@@ -34,7 +34,8 @@ function buildDateFilter(query = {}) {
 
 router.get('/', async (req, res) => {
   const filter = buildDateFilter(req.query);
-  if (req.user.role !== 'admin' || req.query.owner === 'me') {
+  const isAdmin = (req.user.role || '').toLowerCase() === 'admin';
+  if (!isAdmin || req.query.owner === 'me') {
     filter.ownerId = req.user.id;
   } else if (req.query.owner) {
     filter.ownerId = req.query.owner;
@@ -68,10 +69,19 @@ router.delete('/:id', async (req, res) => {
     const item = await ShiftSummary.findById(req.params.id);
     if (!item) return res.status(404).json({ error: 'No encontrado' });
     const isOwner = String(item.ownerId) === String(req.user.id);
-    const isAdmin = req.user.role === 'admin';
+    const isAdmin = (req.user.role || '').toLowerCase() === 'admin';
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[DELETE /summaries/:id]', {
+        userId: req.user.id,
+        role: req.user.role,
+        ownerId: String(item.ownerId),
+        isOwner,
+        isAdmin,
+      });
+    }
     if (!isOwner && !isAdmin) return res.status(403).json({ error: 'Forbidden' });
 
-    await ShiftSummary.deleteOne({ _id: item._id });
+    await ShiftSummary.findByIdAndDelete(item._id);
     res.json({ ok: true });
   } catch (err) {
     console.error('[DELETE /summaries/:id] error:', err);

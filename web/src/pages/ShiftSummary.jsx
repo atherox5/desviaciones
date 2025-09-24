@@ -249,6 +249,7 @@ export default function ShiftSummary({
     try {
       await onDeleteSummary(entry._id);
       setEntries((prev) => prev.filter((it) => it._id !== entry._id));
+      setError('');
     } catch (e) {
       console.error(e);
       setError(e.message || 'No se pudo eliminar la novedad');
