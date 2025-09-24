@@ -7,7 +7,7 @@ export const env = {
   JWT_SECRET: process.env.JWT_SECRET || 'dev_jwt_secret_cambia_esto',
   REFRESH_JWT_SECRET: process.env.REFRESH_JWT_SECRET || 'dev_refresh_secret_cambia_esto',
   CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:5173',
-  ALLOW_OPEN_REG: (process.env.ALLOW_OPEN_REG ?? 'true') === 'true',
+  ALLOW_OPEN_REG: (process.env.ALLOW_OPEN_REG ?? 'false') === 'true',
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',

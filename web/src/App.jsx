@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocati
 import Dashboard from "./pages/Dashboard.jsx";
 import UsersAdmin from "./pages/UsersAdmin.jsx";
 import ShiftSummary from "./pages/ShiftSummary.jsx";
+import Profile from "./pages/Profile.jsx";
 
 // ==============================================
 // Frontend conectado a API + Exportar a PDF + Visor de Fotos (modal)
@@ -48,22 +49,11 @@ async function authLogin(username, password) {
   return data.user; // {id, username, role}
 }
 
-async function authRegister(username, password) {
-  const res = await fetch(`${API}/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error("No se pudo registrar");
-  return res.json();
-}
-
-async function authSetupAdmin(username, password) {
+async function authSetupAdmin(username, password, fullName) {
   const res = await fetch(`${API}/auth/setup-admin`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, fullName }),
     credentials: "include",
   });
   if (!res.ok) throw new Error("No se pudo crear admin");
@@ -144,6 +134,36 @@ async function deleteUserAccount(id) {
   if (!res.ok) {
     const data = await res.json().catch(()=>({}));
     throw new Error(data?.error || 'No se pudo eliminar usuario');
+  }
+  return res.json();
+}
+
+async function createUserAccount(payload) {
+  const res = await apiFetch(`/users`, { method: 'POST', body: JSON.stringify(payload) });
+  if (res.status === 401) throw new Error('Sesión expirada');
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data?.error || 'No se pudo crear usuario');
+  }
+  return res.json();
+}
+
+async function updateSelfProfile(payload) {
+  const res = await apiFetch(`/users/me`, { method: 'PATCH', body: JSON.stringify(payload) });
+  if (res.status === 401) throw new Error('Sesión expirada');
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data?.error || 'No se pudo actualizar perfil');
+  }
+  return res.json();
+}
+
+async function changeOwnPassword(payload) {
+  const res = await apiFetch(`/users/me/password`, { method: 'PATCH', body: JSON.stringify(payload) });
+  if (res.status === 401) throw new Error('Sesión expirada');
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data?.error || 'No se pudo actualizar la contraseña');
   }
   return res.json();
 }
@@ -307,25 +327,29 @@ const emptyReport = () => ({
   ownerName: "",
 });
 
-function LoginScreen({ usersExist, onSetupAdmin, onLogin, onRegister, error }) {
+function LoginScreen({ usersExist, onSetupAdmin, onLogin, error }) {
   const [tab, setTab] = useState(usersExist ? "login" : "setup");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   return (
     <div className="max-w-md mx-auto bg-gray-900/60 border border-gray-800 rounded-2xl p-6 text-center">
       <div className="flex items-center justify-center gap-2 mb-4">
         {!usersExist && (
           <button className={`px-3 py-1.5 rounded-lg text-sm ${tab==='setup'? 'bg-indigo-600 text-white':'bg-gray-800 text-gray-200'}`} onClick={()=>setTab('setup')}>Configurar admin</button>
         )}
-        <button className={`px-3 py-1.5 rounded-lg text-sm ${tab==='login'? 'bg-indigo-600 text-white':'bg-gray-800 text-gray-200'}`} onClick={()=>setTab('login')}>Iniciar sesión</button>
-        <button className={`px-3 py-1.5 rounded-lg text-sm ${tab==='register'? 'bg-indigo-600 text-white':'bg-gray-800 text-gray-200'}`} onClick={()=>setTab('register')}>Registrarse</button>
+        <button className={`px-3 py-1.5 rounded-lg text-sm ${tab==='login'? 'bg-indigo-600 text-white':'bg-gray-800 text-gray-200'}`} onClick={()=>{ setTab('login'); setFullName(''); }}>Iniciar sesión</button>
       </div>
       {error && <div className="mb-3 text-sm text-red-400">{error}</div>}
       <Campo label="Usuario" required><TextInput value={username} onChange={(e)=>setUsername(e.target.value)} className="text-center" /></Campo>
       <Campo label="Contraseña" required><TextInput type="password" value={password} onChange={(e)=>setPassword(e.target.value)} className="text-center" /></Campo>
-      {tab==='setup' && <button onClick={()=>onSetupAdmin(username,password)} className="w-full px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm">Crear superusuario</button>}
+      {tab==='setup' && (
+        <>
+          <Campo label="Nombre completo" required><TextInput value={fullName} onChange={(e)=>setFullName(e.target.value)} className="text-center" /></Campo>
+          <button onClick={()=>onSetupAdmin(username,password,fullName)} className="w-full px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm">Crear superusuario</button>
+        </>
+      )}
       {tab==='login' && <button onClick={()=>onLogin(username,password)} className="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Entrar</button>}
-      {tab==='register' && <button onClick={()=>onRegister(username,password)} className="w-full px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm">Crear cuenta (usuario)</button>}
     </div>
   );
 }
@@ -461,9 +485,12 @@ function AppInner() {
   const fetchUsersList = useCallback(() => listUsers(), []);
   const updateUserFn = useCallback((id, payload) => updateUserProfile(id, payload), []);
   const deleteUserFn = useCallback((id) => deleteUserAccount(id), []);
+  const createUserFn = useCallback((payload) => createUserAccount(payload), []);
   const listSummariesFn = useCallback((params) => listSummaries(params), []);
   const createSummaryFn = useCallback((payload) => createSummaryEntry(payload), []);
   const deleteSummaryFn = useCallback((id) => deleteSummaryEntry(id), []);
+  const updateSelfProfileFn = useCallback((payload) => updateSelfProfile(payload), []);
+  const changePasswordFn = useCallback((payload) => changeOwnPassword(payload), []);
 
   // NUEVO: visor de fotos
   const [viewer, setViewer] = useState({ open: false, index: 0 });
@@ -499,9 +526,9 @@ function AppInner() {
     })();
   }, [currentUser, onlyMine]);
 
-  const handleSetupAdmin = async (u,p) => {
+  const handleSetupAdmin = async (u,p,name) => {
     try {
-      const user = await authSetupAdmin(u,p);
+      const user = await authSetupAdmin(u,p,name);
       setCurrentUser(user);
       setAuthError("");
       setUsersExist(true);
@@ -525,18 +552,6 @@ function AppInner() {
       setAuthError(e.message || 'Error');
     }
   };
-  const handleRegister = async (u,p) => {
-    try {
-      await authRegister(u,p);
-      const user = await authLogin(u,p);
-      setCurrentUser(user);
-      setAuthError("");
-      setUsersExist(true);
-      redirectToDashboard();
-    } catch(e) {
-      setAuthError(e.message || 'Error');
-    }
-  };
   const handleLogout = async ()=>{
     await authLogout();
     setCurrentUser(null);
@@ -544,6 +559,16 @@ function AppInner() {
     setItems([]);
     setUsersExist(true);
     if (location.pathname !== "/") navigate("/", { replace: true });
+  };
+
+  const handleProfileUpdate = async (payload) => {
+    const updated = await updateSelfProfileFn(payload);
+    setCurrentUser((prev) => prev ? { ...prev, ...updated } : updated);
+    return updated;
+  };
+
+  const handlePasswordChange = async (payload) => {
+    await changePasswordFn(payload);
   };
 
   const validarStep = (s) => {
@@ -636,7 +661,6 @@ function AppInner() {
             usersExist={usersExist}
             onSetupAdmin={handleSetupAdmin}
             onLogin={handleLogin}
-            onRegister={handleRegister}
             error={authError}
           />
         </div>
@@ -827,6 +851,7 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
               <NavLink to="/" className={navLinkClass}>Reportes</NavLink>
               <NavLink to="/dashboard" className={navLinkClass}>Dashboard</NavLink>
               <NavLink to="/resumen-turno" className={navLinkClass}>Resumen de turno</NavLink>
+              <NavLink to="/perfil" className={navLinkClass}>Perfil</NavLink>
               {currentUser.role === 'admin' && (
                 <NavLink to="/usuarios" className={navLinkClass}>Usuarios</NavLink>
               )}
@@ -834,7 +859,7 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
           </div>
           <div className="flex items-center gap-2">
             <div className="text-sm text-gray-300 bg-gray-800/60 border border-gray-700 rounded-xl px-3 py-2">
-              Sesión: <span className="font-semibold text-white">{currentUser.username}</span> <span className="text-xs text-gray-400">({currentUser.role==='admin'?'superusuario':'usuario'})</span>
+              Sesión: <span className="font-semibold text-white">{currentUser.fullName ? `${currentUser.fullName} • ${currentUser.username}` : currentUser.username}</span> <span className="text-xs text-gray-400">({currentUser.role==='admin'?'superusuario':'usuario'})</span>
             </div>
             <button onClick={handleLogout} className="px-3 py-2 rounded-xl bg-gray-700 hover:bg-gray-600 text-white text-sm shadow">Cerrar sesión</button>
           </div>
@@ -859,6 +884,19 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
             }
           />
           <Route
+            path="/perfil"
+            element={
+              <Profile
+                currentUser={currentUser}
+                onAuthError={handleLogout}
+                onUpdateProfile={handleProfileUpdate}
+                onChangePassword={handlePasswordChange}
+                onUploadSignature={getSignature}
+                onUploadFiles={uploadToCloudinary}
+              />
+            }
+          />
+          <Route
             path="/usuarios"
             element={
               currentUser.role === 'admin'
@@ -867,6 +905,7 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
                     currentUser={currentUser}
                     onAuthError={handleLogout}
                     onFetchUsers={fetchUsersList}
+                    onCreateUser={createUserFn}
                     onUpdateUser={updateUserFn}
                     onDeleteUser={deleteUserFn}
                   />

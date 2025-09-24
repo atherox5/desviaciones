@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 
-export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onUpdateUser, onDeleteUser }) {
+export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onCreateUser, onUpdateUser, onDeleteUser }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [newUser, setNewUser] = useState({ username: '', fullName: '', password: '', role: 'user' });
 
   useEffect(() => {
     if (currentUser?.role !== 'admin') return;
@@ -33,17 +35,30 @@ export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onU
   if (currentUser.role !== 'admin') return <Navigate to="/" replace />;
 
   function startEdit(user) {
+    setError('');
     setEditing({
       id: user.id,
       username: user.username,
+      fullName: user.fullName || '',
+      photoUrl: user.photoUrl || '',
       role: user.role,
       password: '',
-      original: { username: user.username, role: user.role },
+      original: { username: user.username, fullName: user.fullName || '', photoUrl: user.photoUrl || '', role: user.role },
     });
   }
 
   function cancelEdit() {
     setEditing(null);
+  }
+
+  function startCreate() {
+    setNewUser({ username: '', fullName: '', password: '', role: 'user' });
+    setCreating(true);
+    setError('');
+  }
+
+  function cancelCreate() {
+    setCreating(false);
   }
 
   async function saveEdit(e) {
@@ -53,6 +68,9 @@ export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onU
     const username = editing.username.trim();
     if (username && username !== editing.original.username) payload.username = username;
     if (editing.role !== editing.original.role) payload.role = editing.role;
+    if ((editing.fullName || '').trim() !== editing.original.fullName) payload.fullName = editing.fullName.trim();
+    const photoUrl = (editing.photoUrl || '').trim();
+    if (photoUrl !== editing.original.photoUrl) payload.photoUrl = photoUrl || '';
     const password = editing.password.trim();
     if (password) payload.password = password;
 
@@ -90,6 +108,31 @@ export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onU
     }
   }
 
+  async function saveNewUser(e) {
+    e.preventDefault();
+    const payload = {
+      username: newUser.username.trim(),
+      fullName: newUser.fullName.trim(),
+      password: newUser.password,
+      role: newUser.role,
+    };
+    if (!payload.username || !payload.fullName || !payload.password) {
+      setError('Completa usuario, nombre completo y contraseña');
+      return;
+    }
+    try {
+      const created = await onCreateUser(payload);
+      setUsers((prev) => [...prev, created].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
+      setCreating(false);
+      setError('');
+      setNewUser({ username: '', fullName: '', password: '', role: 'user' });
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'No se pudo crear usuario');
+      if ((err.message || '').toLowerCase().includes('expirada')) onAuthError?.();
+    }
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-4 space-y-6 text-gray-100">
       <div>
@@ -106,13 +149,17 @@ export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onU
       <div className="bg-gray-900/60 border border-gray-800 rounded-2xl shadow-lg shadow-black/10">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
           <h2 className="text-sm font-semibold text-white uppercase tracking-wide">Usuarios registrados</h2>
-          <span className="text-xs text-gray-400">{users.length} usuarios</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-400">{users.length} usuarios</span>
+            <button onClick={startCreate} className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">Crear nuevo usuario</button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-800/60 text-gray-300 uppercase text-xs">
               <tr>
                 <th className="text-left px-4 py-2">Usuario</th>
+                <th className="text-left px-4 py-2">Nombre completo</th>
                 <th className="text-left px-4 py-2">Rol</th>
                 <th className="text-left px-4 py-2">Creado</th>
                 <th className="text-left px-4 py-2">Actualizado</th>
@@ -124,6 +171,7 @@ export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onU
               {users.map((user) => (
                 <tr key={user.id} className="text-gray-200">
                   <td className="px-4 py-2 font-medium text-white">{user.username}</td>
+                  <td className="px-4 py-2 text-gray-200">{user.fullName || '—'}</td>
                   <td className="px-4 py-2">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${user.role === 'admin' ? 'bg-indigo-600/50 text-indigo-100 border border-indigo-500/60' : 'bg-gray-700/70 text-gray-100 border border-gray-600/60'}`}>
                       {user.role === 'admin' ? 'Superusuario' : 'Usuario'}
@@ -152,14 +200,14 @@ export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onU
               ))}
               {users.length === 0 && !loading && (
                 <tr>
-                  <td className="px-4 py-4 text-center text-gray-400" colSpan={6}>
+                  <td className="px-4 py-4 text-center text-gray-400" colSpan={7}>
                     No hay usuarios para mostrar.
                   </td>
                 </tr>
               )}
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-center text-gray-400" colSpan={6}>
+                  <td className="px-4 py-4 text-center text-gray-400" colSpan={7}>
                     Cargando…
                   </td>
                 </tr>
@@ -177,6 +225,23 @@ export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onU
             <input
               value={editing.username}
               onChange={(e) => setEditing((prev) => ({ ...prev, username: e.target.value }))}
+              className="w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 uppercase font-semibold mb-1">Nombre completo</label>
+            <input
+              value={editing.fullName}
+              onChange={(e) => setEditing((prev) => ({ ...prev, fullName: e.target.value }))}
+              className="w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 uppercase font-semibold mb-1">Foto (URL)</label>
+            <input
+              value={editing.photoUrl}
+              onChange={(e) => setEditing((prev) => ({ ...prev, photoUrl: e.target.value }))}
+              placeholder="https://..."
               className="w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
@@ -204,6 +269,52 @@ export default function UsersAdmin({ currentUser, onAuthError, onFetchUsers, onU
           <div className="flex items-center gap-2 justify-end">
             <button type="button" onClick={cancelEdit} className="px-3 py-2 rounded-xl bg-gray-700 hover:bg-gray-600 text-sm text-white">Cancelar</button>
             <button type="submit" className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-sm text-white">Guardar cambios</button>
+          </div>
+        </form>
+      )}
+
+      {creating && (
+        <form onSubmit={saveNewUser} className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4 space-y-3 shadow-inner shadow-black/20">
+          <h3 className="text-sm font-semibold text-white uppercase tracking-wide">Crear nuevo usuario</h3>
+          <div>
+            <label className="block text-xs text-gray-400 uppercase font-semibold mb-1">Usuario</label>
+            <input
+              value={newUser.username}
+              onChange={(e) => setNewUser((prev) => ({ ...prev, username: e.target.value }))}
+              className="w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 uppercase font-semibold mb-1">Nombre completo</label>
+            <input
+              value={newUser.fullName}
+              onChange={(e) => setNewUser((prev) => ({ ...prev, fullName: e.target.value }))}
+              className="w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 uppercase font-semibold mb-1">Contraseña</label>
+            <input
+              type="password"
+              value={newUser.password}
+              onChange={(e) => setNewUser((prev) => ({ ...prev, password: e.target.value }))}
+              className="w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 uppercase font-semibold mb-1">Rol</label>
+            <select
+              value={newUser.role}
+              onChange={(e) => setNewUser((prev) => ({ ...prev, role: e.target.value }))}
+              className="w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="user">Usuario</option>
+              <option value="admin">Superusuario</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2 justify-end">
+            <button type="button" onClick={cancelCreate} className="px-3 py-2 rounded-xl bg-gray-700 hover:bg-gray-600 text-sm text-white">Cancelar</button>
+            <button type="submit" className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-sm text-white">Crear</button>
           </div>
         </form>
       )}
