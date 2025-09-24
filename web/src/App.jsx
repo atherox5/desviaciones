@@ -557,8 +557,16 @@ function AppInner() {
     setStep(1);
   }
   async function onDeleteReport(it) {
-    if (!confirm(`¿Eliminar ${it.folio}?`)) return; await deleteReport(it._id); setForm(emptyReport());
-    const list = await listReports({ owner: currentUser.role==='admin' && !onlyMine ? undefined : 'me' }); setItems(list);
+    if (!confirm(`¿Eliminar ${it.folio}?`)) return;
+    try {
+      await deleteReport(it._id);
+      setForm(emptyReport());
+      const list = await listReports({ owner: currentUser.role==='admin' && !onlyMine ? undefined : 'me' });
+      setItems(list);
+    } catch (e) {
+      console.error(e);
+      alert(e.message || 'No se pudo eliminar');
+    }
   }
 
   const filtered = useMemo(()=> items, [items]);

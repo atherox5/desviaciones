@@ -202,6 +202,18 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// eliminar (dueño o admin)
+router.delete('/:id', async (req, res) => {
+  const it = await Report.findById(req.params.id);
+  if (!it) return res.status(404).json({ error: 'No encontrado' });
+  const isOwner = String(it.ownerId) === String(req.user.id);
+  const isAdmin = req.user.role === 'admin';
+  if (!isOwner && !isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+  await it.deleteOne();
+  res.json({ ok: true });
+});
+
 // cambiar estado (dueño o admin; transiciones válidas)
 router.patch('/:id/status', async (req, res) => {
   const body = z.object({ status: z.enum(['pendiente','tratamiento','concluido']) }).safeParse(req.body);
