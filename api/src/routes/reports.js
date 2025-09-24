@@ -45,15 +45,25 @@ function toDDMMYY(s) {
 async function nextFolioForDate(fechaStr) {
   const base = toDDMMYY(fechaStr);
   const prefix = `DESV-${base}-`;
-  const [last] = await Report.aggregate([
-    { $match: { folio: { $regex: `^${prefix}\\d{2,3}$` } } },
-    { $addFields: { _suf: { $toInt: { $arrayElemAt: [{ $split: ['$folio','-'] }, -1] } } } },
-    { $sort: { _suf: -1 } },
-    { $limit: 1 }
-  ]);
-  const next = last ? last._suf + 1 : 1;
-  const pad = next >= 100 ? 3 : 2;
-  return prefix + String(next).padStart(pad, '0');
+  const existing = await Report.find(
+    { folio: { $regex: `^${prefix}` } },
+    { folio: 1 }
+  ).lean();
+
+  const used = new Set();
+  for (const item of existing) {
+    const suf = (item.folio || '').slice(-2);
+    const num = Number.parseInt(suf, 10);
+    if (!Number.isNaN(num)) used.add(num);
+  }
+
+  for (let i = 1; i <= 99; i += 1) {
+    if (!used.has(i)) {
+      return `${prefix}${String(i).padStart(2, '0')}`;
+    }
+  }
+
+  throw new Error('Correlativo agotado');
 }
 
 /* ---------- helpers ---------- */
@@ -102,8 +112,12 @@ function buildDateFilter(q) {
 // preview del próximo folio
 router.get('/next-folio', async (req, res) => {
   const fecha = (req.query.fecha || '').toString();
-  const folio = await nextFolioForDate(fecha);
-  res.json({ folio });
+  try {
+    const folio = await nextFolioForDate(fecha);
+    res.json({ folio });
+  } catch (err) {
+    res.status(409).json({ error: 'Sin correlativos disponibles' });
+  }
 });
 
 // listado con filtros (owner/q/fecha/limit)
@@ -143,7 +157,13 @@ router.post('/', async (req, res) => {
   if (!data.status) data.status = 'pendiente';
 
   let folio = (data.folio || '').trim();
-  if (!folio) folio = await nextFolioForDate(data.fecha);
+  if (!folio) {
+    try {
+      folio = await nextFolioForDate(data.fecha);
+    } catch (err) {
+      return res.status(409).json({ error: 'Sin correlativos disponibles' });
+    }
+  }
 
   for (let i = 0; i < 5; i++) {
     try {
@@ -156,7 +176,11 @@ router.post('/', async (req, res) => {
       return res.status(201).json(item);
     } catch (e) {
       if (e?.code === 11000 && e?.keyPattern?.folio) {
-        folio = await nextFolioForDate(data.fecha);
+        try {
+          folio = await nextFolioForDate(data.fecha);
+        } catch (err) {
+          return res.status(409).json({ error: 'Sin correlativos disponibles' });
+        }
         continue;
       }
       console.error('[POST /reports] error:', e);
