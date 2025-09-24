@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import ShiftSummary from '../models/ShiftSummary.js';
+import User from '../models/User.js';
 import { authRequired } from '../middleware/auth.js';
 
 const router = Router();
@@ -43,7 +44,22 @@ router.get('/', async (req, res) => {
 
   const limit = Math.min(Number(req.query.limit) || 200, 500);
   const items = await ShiftSummary.find(filter).sort({ fecha: -1, createdAt: -1 }).limit(limit);
-  res.json(items);
+
+  const ownerIds = [...new Set(items.map((it) => String(it.ownerId)))];
+  const users = await User.find({ _id: { $in: ownerIds } }, { fullName: 1, username: 1 }).lean();
+  const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+  const payload = items.map((it) => {
+    const obj = it.toObject();
+    const user = userMap.get(String(it.ownerId));
+    if (user) {
+      obj.ownerFullName = user.fullName || user.username;
+      if (!obj.ownerName) obj.ownerName = user.fullName || user.username;
+    }
+    return obj;
+  });
+
+  res.json(payload);
 });
 
 router.post('/', async (req, res) => {
