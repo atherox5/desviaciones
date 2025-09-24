@@ -6,22 +6,6 @@ const hoyISO = () => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 };
 
-function startOfWeek(date = new Date()) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // ajusta para lunes
-  const monday = new Date(d.setDate(diff));
-  monday.setHours(0, 0, 0, 0);
-  return monday;
-}
-
-function endOfWeek(date = new Date()) {
-  const monday = startOfWeek(date);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  return sunday;
-}
-
 const toISODate = (date) => {
   const d = new Date(date);
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -115,11 +99,15 @@ export default function ShiftSummary({
   dataURLFromURL,
 }) {
   const areaOptions = Array.isArray(areas) ? areas : [];
-  const monday = useMemo(() => startOfWeek(), []);
-  const sunday = useMemo(() => endOfWeek(), []);
+  const todayISO = useMemo(() => toISODate(new Date()), []);
+  const sevenDaysAgoISO = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return toISODate(d);
+  }, []);
 
-  const [fromDate, setFromDate] = useState(toISODate(monday));
-  const [toDate, setToDate] = useState(toISODate(sunday));
+  const [fromDate, setFromDate] = useState(sevenDaysAgoISO);
+  const [toDate, setToDate] = useState(todayISO);
 
   const [form, setForm] = useState({ fecha: hoyISO(), area: '', ubicacion: '', novedades: '', fotos: [] });
   const [entries, setEntries] = useState([]);
