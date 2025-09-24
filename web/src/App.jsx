@@ -211,7 +211,7 @@ const horaActual = () => { const d = new Date(); return `${pad2(d.getHours())}:$
 
 const TIPOS = ["Seguridad","Calidad","Medio Ambiente","Mantención","Producción","Logística","Otros"];
 const SEVERIDADES = ["Baja","Media","Alta","Crítica"];
-const AREAS = ["Planta Concentradora","Líneas STR 28\"","Líneas STR 36\"","Chancado","Espesadores","Relaves","Mantenimiento","Operaciones Mina"];
+const AREAS = ["STC", "STR", "Aguas"];
 const ESTADOS = [
   { value: 'pendiente', label: 'Pendiente' },
   { value: 'tratamiento', label: 'En tratamiento' },
