@@ -122,6 +122,7 @@ export default function ShiftSummary({
   const isEditing = Boolean(editing);
 
   const resetForm = () => setForm({ fecha: hoyISO(), area: '', ubicacion: '', novedades: '', fotos: [] });
+  const [lastDeleted, setLastDeleted] = useState(null);
 
   useEffect(() => {
     if (editing && !entries.some((it) => it._id === editing._id)) {
@@ -249,6 +250,7 @@ export default function ShiftSummary({
         resetForm();
         setError('');
       }
+      setLastDeleted(null);
       await loadEntries();
     } catch (e) {
       console.error(e);
@@ -270,6 +272,7 @@ export default function ShiftSummary({
         setEditing(null);
         resetForm();
       }
+      setLastDeleted({ entry, timestamp: Date.now() });
       await loadEntries();
     } catch (e) {
       console.error(e);
@@ -296,6 +299,27 @@ export default function ShiftSummary({
     setEditing(null);
     resetForm();
     setError('');
+  }
+
+  async function handleUndoDelete() {
+    if (!lastDeleted) return;
+    const { entry } = lastDeleted;
+    const payload = {
+      fecha: entry.fecha,
+      area: entry.area,
+      ubicacion: entry.ubicacion || '',
+      novedades: entry.novedades || '',
+      fotos: (entry.fotos || []).filter((f) => f?.url).map((f) => ({ url: f.url, nota: f.nota || '' })),
+    };
+    try {
+      await onCreateSummary(payload);
+      setLastDeleted(null);
+      await loadEntries();
+    } catch (e) {
+      console.error(e);
+      setError(e.message || 'No se pudo deshacer la eliminación');
+      if ((e.message || '').toLowerCase().includes('expirada')) onAuthError?.();
+    }
   }
 
   const locationPriority = useMemo(() => {
@@ -363,8 +387,8 @@ export default function ShiftSummary({
     };
 
     const addLine = (text, opts = {}) => {
-      const size = opts.size || 10;
-      const leading = opts.leading || 13;
+      const size = opts.size || 8;
+      const leading = opts.leading || 11;
       const bold = opts.bold || false;
       doc.setFont('helvetica', bold ? 'bold' : 'normal');
       doc.setFontSize(size);
@@ -378,40 +402,40 @@ export default function ShiftSummary({
 
     const title = `Resumen semanal de novedades ${areaLabel}`.trim();
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text(title, pageW / 2, y, { align: 'center' });
-    y += 22;
-
-    doc.setFont('helvetica', 'normal');
     doc.setFontSize(11);
-    doc.text(`Turno: ${formatDisplayDate(fromDate)} – ${formatDisplayDate(toDate)}`, pageW / 2, y, { align: 'center' });
+    doc.text(title, pageW / 2, y, { align: 'center' });
     y += 18;
 
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`Turno: ${formatDisplayDate(fromDate)} – ${formatDisplayDate(toDate)}`, pageW / 2, y, { align: 'center' });
+    y += 14;
+
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(9);
     doc.text(`Operador: ${operatorName}`, pageW / 2, y, { align: 'center' });
-    y += 24;
+    y += 18;
 
     y += 6;
 
     for (const [ubicacionLabel, items] of groupedByLocation) {
-      ensureSpace(80);
+      ensureSpace(60);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
+      doc.setFontSize(9);
       doc.text(`${ubicacionLabel}`, margin, y);
-      y += 18;
+      y += 14;
 
       for (const entry of items) {
-        ensureSpace(90);
-        addLine(entry.novedades || '—', { size: 10, leading: 14 });
-        y += 10;
+        ensureSpace(70);
+        addLine(entry.novedades || '—', { size: 8, leading: 12 });
+        y += 9;
 
         if (entry.fotos?.length) {
           const cellW = (pageW - margin * 2 - 20) / 3;
           const cellH = 110;
-          ensureSpace(cellH + 50);
+          ensureSpace(cellH + 36);
           doc.setFont('helvetica', 'bold');
-          doc.setFontSize(9);
+          doc.setFontSize(7);
           doc.text('Registro fotográfico:', margin, y);
           y += 16;
 
@@ -437,9 +461,9 @@ export default function ShiftSummary({
               }
             }
           }
-          y += cellH + 26;
+          y += cellH + 20;
         }
-        y += 10;
+        y += 8;
       }
     }
 
@@ -457,6 +481,12 @@ export default function ShiftSummary({
       {error && (
         <div className="bg-red-900/40 text-red-200 border border-red-700/60 rounded-xl px-4 py-2 text-sm text-center">
           {error}
+        </div>
+      )}
+      {lastDeleted && (
+        <div className="bg-amber-900/30 border border-amber-600/50 text-amber-100 rounded-2xl px-4 py-3 text-sm flex flex-wrap items-center justify-between gap-3">
+          <span>Se eliminó una novedad de {lastDeleted.entry.area}. ¿Deshacer?</span>
+          <button onClick={handleUndoDelete} className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-gray-900 rounded-lg text-xs font-semibold">Deshacer</button>
         </div>
       )}
 
