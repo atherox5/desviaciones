@@ -683,6 +683,17 @@ function AppInner() {
         }
       }
       payload.reportante = currentUser.fullName?.trim() ? currentUser.fullName : currentUser.username;
+      if (!payload.folio) {
+        try {
+          const res = await apiFetch(`/reports/next-folio?fecha=${payload.fecha}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.folio) payload.folio = data.folio;
+          }
+        } catch (err) {
+          console.warn('No se pudo obtener folio correlativo', err);
+        }
+      }
       let saved;
       if (!form._id) saved = await createReport(payload); else saved = await updateReport(form._id, payload);
       setForm((prev) => {
@@ -789,7 +800,7 @@ function AppInner() {
             <Campo label="Número de aviso SAP">
               <TextInput value={form.sapAviso||""} onChange={(e)=>canEdit && setForm({...form, sapAviso:e.target.value})} disabled={!canEdit} placeholder="Ej: 50012345" />
             </Campo>
-            <Campo label="Reportante"><TextInput value={form.reportante} onChange={(e)=>canEdit && setForm({...form, reportante:e.target.value})} disabled={!canEdit} /></Campo>
+            <Campo label="Reportante"><TextInput value={form.reportante} readOnly disabled className="cursor-not-allowed opacity-80" /></Campo>
             <Campo label="Fecha" required><TextInput type="date" value={form.fecha} onChange={(e)=>canEdit && setForm({...form, fecha:e.target.value})} disabled={!canEdit} /></Campo>
             <Campo label="Hora" required><TextInput type="time" value={form.hora} onChange={(e)=>canEdit && setForm({...form, hora:e.target.value})} disabled={!canEdit} /></Campo>
             <Campo label="Área"><Select value={form.area} onChange={(e)=>canEdit && setForm({...form, area:e.target.value})} disabled={!canEdit}><option value="">Seleccione área…</option>{AREAS.map(a=> <option key={a} value={a}>{a}</option>)}</Select></Campo>
