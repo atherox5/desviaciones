@@ -606,8 +606,8 @@ function AppInner() {
       if (prev._id) return prev;
       const name = currentUser.fullName?.trim() ? currentUser.fullName : currentUser.username;
       const ownerId = currentUser.id || prev.ownerId;
-      if (prev.ownerName === name && prev.ownerId === ownerId) return prev;
-      return { ...prev, ownerName: name, ownerId };
+      if (prev.ownerName === name && prev.ownerId === ownerId && prev.reportante === name) return prev;
+      return { ...prev, ownerName: name, ownerId, reportante: name };
     });
   }, [currentUser]);
 
@@ -682,6 +682,7 @@ function AppInner() {
           payload.fotos = payload.fotos.filter(f=>!f.url?.startsWith("data:"));
         }
       }
+      payload.reportante = currentUser.fullName?.trim() ? currentUser.fullName : currentUser.username;
       let saved;
       if (!form._id) saved = await createReport(payload); else saved = await updateReport(form._id, payload);
       setForm((prev) => {
