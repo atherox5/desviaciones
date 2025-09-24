@@ -600,6 +600,17 @@ function AppInner() {
     })();
   }, [currentUser, onlyMine]);
 
+  useEffect(() => {
+    if (!currentUser) return;
+    setForm((prev) => {
+      if (prev._id) return prev;
+      const name = currentUser.fullName?.trim() ? currentUser.fullName : currentUser.username;
+      const ownerId = currentUser.id || prev.ownerId;
+      if (prev.ownerName === name && prev.ownerId === ownerId) return prev;
+      return { ...prev, ownerName: name, ownerId };
+    });
+  }, [currentUser]);
+
   const handleSetupAdmin = async (u,p,name) => {
     try {
       const user = await authSetupAdmin(u,p,name);
