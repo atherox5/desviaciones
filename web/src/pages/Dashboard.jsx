@@ -19,7 +19,7 @@ function Donut({ value = 0 }) {
 
 export default function Dashboard({ apiFetch, onAuthError }) {
   const [items, setItems] = useState([]);
-  const [period, setPeriod] = useState('day');       // 'day' | 'month' | 'year'
+  const [period, setPeriod] = useState('all');       // 'all' | 'day' | 'month' | 'year'
   const [date, setDate] = useState(() => new Date().toISOString().slice(0,10));
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0,7));
   const [year, setYear] = useState(() => String(new Date().getFullYear()));
@@ -110,6 +110,7 @@ export default function Dashboard({ apiFetch, onAuthError }) {
             onChange={e=>setPeriod(e.target.value)}
             className="bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
+            <option value="all">Todos</option>
             <option value="day">Día</option>
             <option value="month">Mes</option>
             <option value="year">Año</option>
