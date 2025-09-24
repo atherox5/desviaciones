@@ -305,7 +305,8 @@ export default function ShiftSummary({
     let y = margin;
 
     const uniqueAreas = [...new Set(entries.map((e) => e.area).filter(Boolean))];
-    const areaLabel = uniqueAreas.length === 1 ? uniqueAreas[0] : 'Todas las áreas';
+    const areaLabel = uniqueAreas.length === 1 ? uniqueAreas[0] : 'Varias áreas';
+    const operatorName = entries[0]?.ownerName || currentUser?.fullName || currentUser?.username || '—';
 
     const addLine = (text, opts = {}) => {
       const size = opts.size || 12;
@@ -323,18 +324,26 @@ export default function ShiftSummary({
       }
     };
 
-    const title = 'Resumen semanal de novedades';
+    const title = `Resumen semanal de novedades ${areaLabel}`.trim();
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.text(title, margin, y);
+    doc.setFontSize(14);
+    doc.text(title, pageW / 2, y, { align: 'center' });
+    y += 22;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.text(`Turno: ${formatDisplayDate(fromDate)} – ${formatDisplayDate(toDate)}`, pageW / 2, y, { align: 'center' });
     y += 18;
 
-    addLine(`Área: ${areaLabel}`, { bold: true, size: 10, leading: 16 });
-    addLine(`Periodo: ${formatDisplayDate(fromDate)} – ${formatDisplayDate(toDate)}`, { size: 10, leading: 16 });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text(`Operador: ${operatorName}`, pageW / 2, y, { align: 'center' });
+    y += 24;
 
-    addLine(`Generado por: ${currentUser?.fullName || currentUser?.username || '—'}`, { bold: true, size: 10, leading: 16 });
-    addLine(`Fecha de creación: ${new Date().toLocaleString()}`, { size: 10, leading: 16 });
-    y += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Fecha de generación: ${new Date().toLocaleString()}`, margin, y);
+    y += 18;
 
     for (const [ubicacionLabel, items] of groupedByLocation) {
       if (y > pageH - margin - 80) {
@@ -351,45 +360,40 @@ export default function ShiftSummary({
           doc.addPage();
           y = margin;
         }
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.text(`${formatDisplayDate(entry.fecha)}`, margin, y);
-        y += 16;
-
         addLine(entry.novedades || '—', { size: 10, leading: 14 });
-        y += 6;
+        y += 10;
 
         if (entry.fotos?.length) {
           const cellW = (pageW - margin * 2 - 20) / 3;
-        const cellH = 110;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.text('Registro fotográfico:', margin, y);
-        y += 16;
+          const cellH = 110;
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9);
+          doc.text('Registro fotográfico:', margin, y);
+          y += 16;
 
-        for (let i = 0; i < entry.fotos.length; i++) {
-          if (y > pageH - margin - cellH) {
-            doc.addPage();
-            y = margin;
-          }
-          const col = i % 3;
-          if (col === 0 && i > 0) y += cellH + 20;
-          const x = margin + col * (cellW + 10);
-          const foto = entry.fotos[i];
-          const dataUrl = await dataURLFromURL(foto.url);
-          if (dataUrl) {
-            try {
-              doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST');
-            } catch (error) {
+          for (let i = 0; i < entry.fotos.length; i++) {
+            if (y > pageH - margin - cellH) {
+              doc.addPage();
+              y = margin;
+            }
+            const col = i % 3;
+            if (col === 0 && i > 0) y += cellH + 20;
+            const x = margin + col * (cellW + 10);
+            const foto = entry.fotos[i];
+            const dataUrl = await dataURLFromURL(foto.url);
+            if (dataUrl) {
               try {
-                doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST');
-              } catch {
-                // ignore if fails
+                doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST');
+              } catch (error) {
+                try {
+                  doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST');
+                } catch {
+                  // ignore if fails
+                }
               }
             }
           }
-        }
-        y += cellH + 26;
+          y += cellH + 26;
         }
         y += 10;
       }
