@@ -691,7 +691,9 @@ function AppInner() {
         return merged;
       });
       const list = await listReports({ owner: currentUser.role==='admin' && !onlyMine ? undefined : 'me' });
-      setItems(list); alert("Guardado ✔");
+      setItems(list);
+      alert("Guardado ✔");
+      navigate('/dashboard', { replace: true });
     } catch (e) { console.error(e); alert("No se pudo guardar"); }
     finally { setSaving(false); }
   }
