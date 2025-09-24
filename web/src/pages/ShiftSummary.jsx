@@ -378,50 +378,40 @@ export default function ShiftSummary({
 
     const title = `Resumen semanal de novedades ${areaLabel}`.trim();
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.text(title, pageW / 2, y, { align: 'center' });
-    y += 18;
+    y += 22;
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
+    doc.setFontSize(11);
     doc.text(`Turno: ${formatDisplayDate(fromDate)} – ${formatDisplayDate(toDate)}`, pageW / 2, y, { align: 'center' });
-    y += 14;
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.text(`Operador: ${operatorName}`, pageW / 2, y, { align: 'center' });
     y += 18;
 
-    y += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text(`Operador: ${operatorName}`, pageW / 2, y, { align: 'center' });
+    y += 24;
+
+    y += 6;
 
     for (const [ubicacionLabel, items] of groupedByLocation) {
-      ensureSpace(60);
+      ensureSpace(80);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
+      doc.setFontSize(11);
       doc.text(`${ubicacionLabel}`, margin, y);
-      y += 14;
+      y += 18;
 
-      let lastDate = null;
       for (const entry of items) {
-        ensureSpace(70);
-        const currentDateLabel = entry.fecha ? formatDisplayDate(entry.fecha) : '';
-        if (currentDateLabel && currentDateLabel !== lastDate) {
-          ensureSpace(20);
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(8);
-          doc.text(currentDateLabel, margin + 4, y);
-          y += 12;
-          lastDate = currentDateLabel;
-        }
-        addLine(entry.novedades || '—', { size: 8, leading: 11 });
-        y += 8;
+        ensureSpace(90);
+        addLine(entry.novedades || '—', { size: 10, leading: 14 });
+        y += 10;
 
         if (entry.fotos?.length) {
           const cellW = (pageW - margin * 2 - 20) / 3;
           const cellH = 110;
-          ensureSpace(cellH + 40);
+          ensureSpace(cellH + 50);
           doc.setFont('helvetica', 'bold');
-          doc.setFontSize(7);
+          doc.setFontSize(9);
           doc.text('Registro fotográfico:', margin, y);
           y += 16;
 
@@ -447,9 +437,9 @@ export default function ShiftSummary({
               }
             }
           }
-          y += cellH + 20;
+          y += cellH + 26;
         }
-        y += 8;
+        y += 10;
       }
     }
 
