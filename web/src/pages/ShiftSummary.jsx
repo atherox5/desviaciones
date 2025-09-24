@@ -268,11 +268,17 @@ export default function ShiftSummary({
 
   const sortedEntries = useMemo(() => {
     return [...entries].sort((a, b) => {
-      if ((a.ubicacion || '') !== (b.ubicacion || '')) {
-        return (a.ubicacion || '').localeCompare(b.ubicacion || '');
+      const locA = (a.ubicacion || '').toLowerCase();
+      const locB = (b.ubicacion || '').toLowerCase();
+      if (locA !== locB) {
+        if (!locA) return 1;
+        if (!locB) return -1;
+        return locA.localeCompare(locB, undefined, { sensitivity: 'base' });
       }
-      if (a.fecha === b.fecha) return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-      return a.fecha > b.fecha ? -1 : 1;
+      const dateA = new Date(a.fecha || a.createdAt || 0).getTime();
+      const dateB = new Date(b.fecha || b.createdAt || 0).getTime();
+      if (dateA !== dateB) return dateA - dateB; // más antiguo primero
+      return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
     });
   }, [entries]);
 
@@ -298,6 +304,9 @@ export default function ShiftSummary({
     const pageH = doc.internal.pageSize.getHeight();
     let y = margin;
 
+    const uniqueAreas = [...new Set(entries.map((e) => e.area).filter(Boolean))];
+    const areaLabel = uniqueAreas.length === 1 ? uniqueAreas[0] : 'Todas las áreas';
+
     const addLine = (text, opts = {}) => {
       const size = opts.size || 12;
       const bold = opts.bold || false;
@@ -314,13 +323,16 @@ export default function ShiftSummary({
       }
     };
 
-    const title = `Resumen semanal de novedades (${formatDisplayDate(fromDate)} – ${formatDisplayDate(toDate)})`;
+    const title = 'Resumen semanal de novedades';
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.text(title, margin, y);
-    y += 20;
+    y += 18;
 
-    addLine(`Generado por: ${currentUser?.username || '—'}`, { bold: true, size: 10, leading: 16 });
+    addLine(`Área: ${areaLabel}`, { bold: true, size: 10, leading: 16 });
+    addLine(`Periodo: ${formatDisplayDate(fromDate)} – ${formatDisplayDate(toDate)}`, { size: 10, leading: 16 });
+
+    addLine(`Generado por: ${currentUser?.fullName || currentUser?.username || '—'}`, { bold: true, size: 10, leading: 16 });
     addLine(`Fecha de creación: ${new Date().toLocaleString()}`, { size: 10, leading: 16 });
     y += 6;
 
@@ -331,7 +343,7 @@ export default function ShiftSummary({
       }
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(11);
-      doc.text(`Ubicación: ${ubicacionLabel}`, margin, y);
+      doc.text(`${ubicacionLabel}`, margin, y);
       y += 18;
 
       for (const entry of items) {
@@ -341,18 +353,14 @@ export default function ShiftSummary({
         }
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(10);
-        doc.text(`${formatDisplayDate(entry.fecha)} · ${entry.area}`, margin, y);
+        doc.text(`${formatDisplayDate(entry.fecha)}`, margin, y);
         y += 16;
 
-        addLine(`Registrado por: ${entry.ownerName || currentUser?.username || '—'}`, { size: 10, leading: 14 });
-        if (entry.ubicacion) {
-          addLine(`Ubicación específica: ${entry.ubicacion}`, { size: 10, leading: 14 });
-        }
         addLine(entry.novedades || '—', { size: 10, leading: 14 });
         y += 6;
 
         if (entry.fotos?.length) {
-        const cellW = (pageW - margin * 2 - 20) / 3;
+          const cellW = (pageW - margin * 2 - 20) / 3;
         const cellH = 110;
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(9);
