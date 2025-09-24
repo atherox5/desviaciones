@@ -355,63 +355,63 @@ export default function ShiftSummary({
     const areaLabel = uniqueAreas.length === 1 ? uniqueAreas[0] : 'Varias áreas';
     const operatorName = entries[0]?.ownerFullName || entries[0]?.ownerName || currentUser?.fullName || currentUser?.username || '—';
 
+    const ensureSpace = (needed = 40) => {
+      if (y > pageH - margin - needed) {
+        doc.addPage();
+        y = margin;
+      }
+    };
+
     const addLine = (text, opts = {}) => {
-      const size = opts.size || 12;
+      const size = opts.size || 10;
+      const leading = opts.leading || 13;
       const bold = opts.bold || false;
       doc.setFont('helvetica', bold ? 'bold' : 'normal');
       doc.setFontSize(size);
       const lines = doc.splitTextToSize(text, pageW - margin * 2);
       for (const line of lines) {
-        if (y > pageH - margin) {
-          doc.addPage();
-          y = margin;
-        }
+        ensureSpace(leading + 4);
         doc.text(line, margin, y);
-        y += opts.leading || 16;
+        y += leading;
       }
     };
 
     const title = `Resumen semanal de novedades ${areaLabel}`.trim();
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
+    doc.setFontSize(12);
     doc.text(title, pageW / 2, y, { align: 'center' });
-    y += 22;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.text(`Turno: ${formatDisplayDate(fromDate)} – ${formatDisplayDate(toDate)}`, pageW / 2, y, { align: 'center' });
     y += 18;
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.text(`Operador: ${operatorName}`, pageW / 2, y, { align: 'center' });
-    y += 24;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`Turno: ${formatDisplayDate(fromDate)} – ${formatDisplayDate(toDate)}`, pageW / 2, y, { align: 'center' });
+    y += 14;
 
-    y += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(`Operador: ${operatorName}`, pageW / 2, y, { align: 'center' });
+    y += 18;
+
+    y += 4;
 
     for (const [ubicacionLabel, items] of groupedByLocation) {
-      if (y > pageH - margin - 80) {
-        doc.addPage();
-        y = margin;
-      }
+      ensureSpace(60);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
+      doc.setFontSize(9);
       doc.text(`${ubicacionLabel}`, margin, y);
-      y += 18;
+      y += 14;
 
       for (const entry of items) {
-        if (y > pageH - margin - 120) {
-          doc.addPage();
-          y = margin;
-        }
-        addLine(entry.novedades || '—', { size: 10, leading: 14 });
-        y += 10;
+        ensureSpace(70);
+        addLine(entry.novedades || '—', { size: 8, leading: 11 });
+        y += 8;
 
         if (entry.fotos?.length) {
           const cellW = (pageW - margin * 2 - 20) / 3;
           const cellH = 110;
+          ensureSpace(cellH + 40);
           doc.setFont('helvetica', 'bold');
-          doc.setFontSize(9);
+          doc.setFontSize(7);
           doc.text('Registro fotográfico:', margin, y);
           y += 16;
 
@@ -437,9 +437,9 @@ export default function ShiftSummary({
               }
             }
           }
-          y += cellH + 26;
+          y += cellH + 20;
         }
-        y += 10;
+        y += 8;
       }
     }
 
