@@ -972,10 +972,10 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
                 </div>
                 <div className="flex flex-col gap-2 w-28">
                   <button
-                    onClick={(e)=>{ e.stopPropagation(); onLoadReport(it); }}
-                    className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-1"
+                    onClick={(e)=>{ e.stopPropagation(); navigate(`/reportes/${it._id}`); }}
+                    className="text-xs bg-slate-700 hover:bg-slate-600 text-white rounded-lg py-1"
                   >
-                    Editar
+                    Ver detalle
                   </button>
                   <button
                     onClick={(e)=>{ e.stopPropagation(); onDeleteReport(it); }}
