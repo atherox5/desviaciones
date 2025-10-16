@@ -22,12 +22,14 @@ import { AREAS, AREA_LOCATIONS } from "./constants/areas.js";
 const API = (() => {
   const envUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
   if (envUrl) return envUrl.replace(/\/$/, '');
+
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     const isLocalHost = ['localhost', '127.0.0.1', '0.0.0.0'].includes(host);
     if (isLocalHost) return 'http://localhost:8081/api';
-    return `${window.location.origin.replace(/\/$/, '')}/api`;
+    return '/api';
   }
+
   return 'http://localhost:8081/api';
 })();
 let accessToken = null; // en memoria; refresh via cookie httpOnly
