@@ -16,17 +16,25 @@ import summariesRoutes from './routes/summaries.js';
 const app = express();
 
 /** CORS dinámico */
-const allowed = new Set(
-  (env.CORS_ORIGIN || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean)
+const allowedEntries = (env.CORS_ORIGIN || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const explicitOrigins = new Set(
+  allowedEntries.filter((value) => !value.startsWith('*.') && value !== '*')
 );
+const wildcardDomains = allowedEntries
+  .filter((value) => value.startsWith('*.'))
+  .map((value) => value.slice(1)); // keep leading dot for clarity
+const allowAll = allowedEntries.includes('*');
 
 const corsConfig = {
   origin(origin, cb) {
     if (!origin) return cb(null, true);              // curl/Postman
-    if (allowed.has(origin)) return cb(null, true);  // coincide con whitelist
+    if (allowAll) return cb(null, true);
+    if (explicitOrigins.has(origin)) return cb(null, true);
+    if (wildcardDomains.some((domain) => origin.endsWith(domain))) return cb(null, true);
     return cb(new Error(`Origin not allowed: ${origin}`));
   },
   credentials: true,
