@@ -726,6 +726,7 @@ function AppInner() {
   };
 
   async function saveReport() {
+    const isNewReport = !form._id;
     if (!currentUser) return;
     setSaving(true);
     try {
@@ -750,7 +751,7 @@ function AppInner() {
         }
       }
       let saved;
-      if (!form._id) saved = await createReport(payload); else saved = await updateReport(form._id, payload);
+      if (isNewReport) saved = await createReport(payload); else saved = await updateReport(form._id, payload);
       setForm((prev) => {
         const base = emptyReport();
         const merged = { ...base, ...prev, ...saved };
@@ -760,7 +761,11 @@ function AppInner() {
       const list = await listReports({ owner: currentUser.role==='admin' && !onlyMine ? undefined : 'me' });
       setItems(list);
       alert("Guardado ✔");
-      navigate('/dashboard', { replace: true });
+      if (isNewReport) {
+        if (typeof window !== 'undefined') window.location.reload();
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     } catch (e) { console.error(e); alert("No se pudo guardar"); }
     finally { setSaving(false); }
   }
