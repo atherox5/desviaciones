@@ -298,7 +298,13 @@ function Lightbox({ photos, index, onClose, onPrev, onNext }) {
         <div className="flex items-center gap-3 p-4">
           <button onClick={onPrev} className="shrink-0 bg-gray-800 hover:bg-gray-700 text-white rounded-full w-10 h-10" aria-label="Anterior">‹</button>
           <div className="flex-1 overflow-hidden">
-            <img src={photo.url} alt="Evidencia" className="mx-auto max-h-[70vh] w-auto rounded-xl object-contain" />
+            <img
+              src={photo.url}
+              alt="Evidencia"
+              className="mx-auto max-h-[70vh] w-auto rounded-xl object-contain cursor-zoom-in"
+              onClick={() => window.open(photo.url, '_blank', 'noopener,noreferrer')}
+              title="Click para abrir en nueva pestaña"
+            />
             {photo.nota && <div className="text-xs text-gray-300 mt-2 text-center px-2">{photo.nota}</div>}
           </div>
           <button onClick={onNext} className="shrink-0 bg-gray-800 hover:bg-gray-700 text-white rounded-full w-10 h-10" aria-label="Siguiente">›</button>
@@ -312,7 +318,13 @@ function FotosGrid({ fotos, uploading, onNota, onRemove, canEdit, onPreview }) {
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
       {fotos.map((f, idx) => (
         <div key={idx} className="bg-gray-800/60 border border-gray-700 rounded-2xl overflow-hidden">
-          <img src={f.url} alt={`Foto ${idx+1}`} className="w-full h-40 object-cover cursor-zoom-in" onClick={()=>onPreview?.(idx)} />
+          <img
+            src={f.url}
+            alt={`Foto ${idx+1}`}
+            className="w-full h-40 object-cover cursor-zoom-in"
+            onClick={(e)=>{ e.preventDefault(); e.stopPropagation(); onPreview?.(idx); }}
+            title="Click para ampliar en visor"
+          />
           <div className="p-2">
             <TextInput value={f.nota||""} onChange={(e)=>onNota(idx, e.target.value)} disabled={!canEdit} placeholder="Nota/Comentario" />
             <button onClick={()=>onRemove(idx)} disabled={!canEdit} className="mt-2 w-full text-sm bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white rounded-lg py-1">Eliminar</button>
