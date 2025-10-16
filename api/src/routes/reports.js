@@ -127,6 +127,11 @@ router.get('/', async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 50, 200);
 
   const filter = buildDateFilter(req.query);
+  const status = (req.query.status || '').toString().trim();
+  if (status) {
+    const allowedStatus = ['pendiente', 'tratamiento', 'concluido'];
+    if (allowedStatus.includes(status)) filter.status = status;
+  }
 
   if (req.user.role !== 'admin') filter.ownerId = req.user.id;
   else if (owner === 'me') filter.ownerId = req.user.id;
