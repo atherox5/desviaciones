@@ -39,7 +39,7 @@ export default function Home({ currentUser, onAuthError, onFetchReports }) {
       } catch (e) {
         if (cancelled) return;
         console.error(e);
-        const msg = e?.message || 'No se pudo cargar tus reportes';
+        const msg = e?.message || 'No se pudo cargar el listado de reportes';
         setError(msg);
         setReports([]);
         if (msg.toLowerCase().includes('expirada')) onAuthError?.();
@@ -53,13 +53,18 @@ export default function Home({ currentUser, onAuthError, onFetchReports }) {
     };
   }, [onFetchReports, onAuthError, currentUser?.id]);
 
+  const userReports = useMemo(() => {
+    if (!currentUser?.id) return [];
+    return reports.filter((r) => r.ownerId && String(r.ownerId) === String(currentUser.id));
+  }, [reports, currentUser?.id]);
+
   const stats = useMemo(() => {
-    const total = reports.length;
-    const concluded = reports.filter((r) => r.status === 'concluido').length;
-    const inTreatment = reports.filter((r) => r.status === 'tratamiento').length;
-    const pending = reports.filter((r) => r.status === 'pendiente').length;
+    const total = userReports.length;
+    const concluded = userReports.filter((r) => r.status === 'concluido').length;
+    const inTreatment = userReports.filter((r) => r.status === 'tratamiento').length;
+    const pending = userReports.filter((r) => r.status === 'pendiente').length;
     return { total, concluded, inTreatment, pending };
-  }, [reports]);
+  }, [userReports]);
 
   const sortedReports = useMemo(() => {
     return [...reports].sort((a, b) => {
@@ -111,6 +116,7 @@ export default function Home({ currentUser, onAuthError, onFetchReports }) {
             </div>
           ))}
         </div>
+        <p className="text-xs text-gray-500 md:text-right md:w-auto">Indicadores calculados con tus reportes.</p>
       </section>
 
       {error && (
@@ -122,65 +128,53 @@ export default function Home({ currentUser, onAuthError, onFetchReports }) {
       <section className="space-y-4">
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-white">Mis reportes</h2>
-            <p className="text-sm text-gray-400">Revisa y edita únicamente los reportes que creaste.</p>
+            <h2 className="text-xl font-semibold text-white">Reportes recientes</h2>
+            <p className="text-sm text-gray-400">Visualización en modo lectura del feed global de reportes.</p>
           </div>
           <div className="text-xs text-gray-400 bg-gray-900/60 border border-gray-800 rounded-xl px-3 py-1.5">
-            Mostrando {sortedReports.length} registros
+            {sortedReports.length} registros
           </div>
         </header>
 
         {loading ? (
           <div className="bg-gray-900/40 border border-gray-800 rounded-xl px-4 py-6 text-center text-sm text-gray-300">
-            Cargando tus reportes…
+            Cargando reportes…
           </div>
         ) : sortedReports.length === 0 ? (
           <div className="bg-gray-900/40 border border-gray-800 rounded-xl px-4 py-6 text-center text-sm text-gray-400">
-            Aún no registras reportes. ¡Crea el primero desde la sección “Nuevo reporte”!
+            No se han registrado reportes todavía.
           </div>
         ) : (
-          <div className="space-y-4">
-            {sortedReports.map((report) => {
-              const statusInfo = STATUS_META[report.status] || STATUS_META.pendiente;
-              const severity = SEVERITY_COLOR[report.severidad] || 'bg-indigo-600';
-              const summary = String(report.descripcion || '').trim();
-              return (
-                <article key={report._id} className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5 shadow-lg shadow-black/10 space-y-4">
-                  <header className="flex flex-wrap items-center gap-3 justify-between">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-lg font-semibold text-white font-mono">{report.folio || 'Sin folio'}</span>
+          <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4 shadow-lg shadow-black/10">
+            <div className="divide-y divide-gray-800/70">
+              {sortedReports.map((report) => {
+                const statusInfo = STATUS_META[report.status] || STATUS_META.pendiente;
+                const severity = SEVERITY_COLOR[report.severidad] || 'bg-indigo-600';
+                return (
+                  <article key={report._id} className="py-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between text-sm text-gray-200">
+                    <div className="flex-1 flex flex-wrap items-center gap-3">
+                      <span className="font-mono text-indigo-200 text-base">{report.folio || 'Sin folio'}</span>
                       <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${statusInfo.badge}`}>
                         {statusInfo.label}
                       </span>
                       <span className={`inline-flex items-center rounded-full ${severity} text-white px-2.5 py-1 text-xs font-semibold`}>
                         {report.severidad || '—'}
                       </span>
+                      <span className="text-xs text-gray-400">
+                        {report.fecha || '—'} · {report.hora || '—'}
+                      </span>
                     </div>
-                    <div className="text-sm text-gray-400">{report.fecha || '—'} · {report.hora || '—'}</div>
-                  </header>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-300">
-                    <Info label="Área">{report.area || '—'}</Info>
-                    <Info label="Ubicación">{report.ubicacion || '—'}</Info>
-                    <Info label="Tipo">{report.tipo || '—'}</Info>
-                    <Info label="Responsable">{report.responsable || '—'}</Info>
-                    <Info label="Número SAP">{report.sapAviso || '—'}</Info>
-                    <Info label="Fecha compromiso">{report.compromiso || '—'}</Info>
-                  </div>
-
-                  {summary && (
-                    <div className="text-sm text-gray-200 bg-gray-800/60 border border-gray-700 rounded-xl p-3">
-                      <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Descripción</div>
-                      <p className="leading-relaxed">{summary}</p>
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-300">
+                      <Info label="Área">{report.area || '—'}</Info>
+                      <Info label="Ubicación">{report.ubicacion || '—'}</Info>
+                      <Info label="Responsable">{report.responsable || '—'}</Info>
+                      <Info label="Creado por">{report.ownerName || '—'}</Info>
                     </div>
-                  )}
-
-                  <footer className="flex flex-wrap items-center justify-between gap-3">
                     <div className="text-xs text-gray-500">ID: {report._id}</div>
-                  </footer>
-                </article>
-              );
-            })}
+                  </article>
+                );
+              })}
+            </div>
           </div>
         )}
       </section>
@@ -190,9 +184,9 @@ export default function Home({ currentUser, onAuthError, onFetchReports }) {
 
 function Info({ label, children }) {
   return (
-    <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-3">
-      <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">{label}</div>
-      <div className="text-white font-medium">{children}</div>
-    </div>
+    <span className="bg-gray-800/60 border border-gray-700 rounded-xl px-3 py-2">
+      <span className="block text-[10px] uppercase tracking-wide text-gray-400">{label}</span>
+      <span className="block text-sm text-white font-medium">{children}</span>
+    </span>
   );
 }
