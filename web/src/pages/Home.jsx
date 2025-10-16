@@ -94,6 +94,8 @@ export default function Home({ currentUser, onAuthError, onFetchReports, onEditR
   const displayName = currentUser?.fullName?.trim() ? currentUser.fullName : currentUser?.username || 'Usuario';
   const roleLabel = currentUser?.role === 'admin' ? 'Superusuario' : 'Usuario';
 
+  const isAdmin = currentUser?.role === 'admin';
+
   const statCards = [
     { label: 'Reportes creados', value: stats.total },
     { label: 'Pendientes', value: stats.pending },
