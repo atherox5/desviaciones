@@ -752,20 +752,27 @@ function AppInner() {
       }
       let saved;
       if (isNewReport) saved = await createReport(payload); else saved = await updateReport(form._id, payload);
-      setForm((prev) => {
-        const base = emptyReport();
-        const merged = { ...base, ...prev, ...saved };
-        merged.status = merged.status || prev.status || base.status;
-        return merged;
-      });
+      if (isNewReport) {
+        const name = currentUser.fullName?.trim() ? currentUser.fullName : currentUser.username;
+        setForm(() => ({
+          ...emptyReport(),
+          ownerId: currentUser.id || null,
+          ownerName: name,
+          reportante: name,
+        }));
+        setStep(1);
+      } else {
+        setForm((prev) => {
+          const base = emptyReport();
+          const merged = { ...base, ...prev, ...saved };
+          merged.status = merged.status || prev.status || base.status;
+          return merged;
+        });
+      }
       const list = await listReports({ owner: currentUser.role==='admin' && !onlyMine ? undefined : 'me' });
       setItems(list);
       alert("Guardado ✔");
-      if (isNewReport) {
-        if (typeof window !== 'undefined') window.location.reload();
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
+      if (!isNewReport) navigate('/dashboard', { replace: true });
     } catch (e) { console.error(e); alert("No se pudo guardar"); }
     finally { setSaving(false); }
   }
