@@ -35,7 +35,10 @@ export default function Home({ currentUser, onAuthError, onFetchReports, onEditR
       try {
         const data = await onFetchReports();
         if (cancelled) return;
-        setReports(Array.isArray(data) ? data : []);
+        const normalized = Array.isArray(data)
+          ? data.filter((item) => item && typeof item === 'object')
+          : [];
+        setReports(normalized);
         setError('');
       } catch (e) {
         if (cancelled) return;
@@ -56,7 +59,7 @@ export default function Home({ currentUser, onAuthError, onFetchReports, onEditR
 
   const userReports = useMemo(() => {
     if (!currentUser?.id) return [];
-    return reports.filter((r) => r.ownerId && String(r.ownerId) === String(currentUser.id));
+    return reports.filter((r) => r?.ownerId && String(r.ownerId) === String(currentUser.id));
   }, [reports, currentUser?.id]);
 
   const stats = useMemo(() => {
@@ -149,33 +152,39 @@ export default function Home({ currentUser, onAuthError, onFetchReports, onEditR
           <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4 shadow-lg shadow-black/10">
             <div className="divide-y divide-gray-800/70">
               {sortedReports.map((report) => {
-                const statusInfo = STATUS_META[report.status] || STATUS_META.pendiente;
-                const severity = SEVERITY_COLOR[report.severidad] || 'bg-indigo-600';
-                const summary = String(report.descripcion || '').trim();
+                const statusInfo = STATUS_META[report?.status] || STATUS_META.pendiente;
+                const severity = SEVERITY_COLOR[report?.severidad] || 'bg-indigo-600';
+                const summary = String(report?.descripcion || '').trim();
                 return (
                   <article key={report._id} className="py-4 flex flex-col gap-4 text-sm text-gray-200">
                     <div className="flex-1 flex flex-wrap items-center gap-3">
-                      <Link
-                        to={`/reportes/${report._id}`}
-                        className="font-mono text-indigo-200 text-base hover:text-indigo-100 hover:underline underline-offset-2"
-                      >
-                        {report.folio || 'Sin folio'}
-                      </Link>
+                      {report?._id ? (
+                        <Link
+                          to={`/reportes/${report._id}`}
+                          className="font-mono text-indigo-200 text-base hover:text-indigo-100 hover:underline underline-offset-2"
+                        >
+                          {report?.folio || 'Sin folio'}
+                        </Link>
+                      ) : (
+                        <span className="font-mono text-indigo-200 text-base">
+                          {report?.folio || 'Sin folio'}
+                        </span>
+                      )}
                       <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${statusInfo.badge}`}>
                         {statusInfo.label}
                       </span>
                       <span className={`inline-flex items-center rounded-full ${severity} text-white px-2.5 py-1 text-xs font-semibold`}>
-                        {report.severidad || '—'}
+                        {report?.severidad || '—'}
                       </span>
                       <span className="text-xs text-gray-400">
-                        {report.fecha || '—'} · {report.hora || '—'}
+                        {report?.fecha || '—'} · {report?.hora || '—'}
                       </span>
                     </div>
                     <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-300">
-                      <Info label="Área">{report.area || '—'}</Info>
-                      <Info label="Ubicación">{report.ubicacion || '—'}</Info>
-                      <Info label="Responsable">{report.responsable || '—'}</Info>
-                      <Info label="Creado por">{report.ownerName || '—'}</Info>
+                      <Info label="Área">{report?.area || '—'}</Info>
+                      <Info label="Ubicación">{report?.ubicacion || '—'}</Info>
+                      <Info label="Responsable">{report?.responsable || '—'}</Info>
+                      <Info label="Creado por">{report?.ownerName || '—'}</Info>
                     </div>
                     {summary && (
                       <div className="max-w-3xl text-xs text-gray-300 leading-relaxed bg-gray-900/60 border border-gray-800 rounded-xl px-3 py-2">
@@ -184,8 +193,8 @@ export default function Home({ currentUser, onAuthError, onFetchReports, onEditR
                       </div>
                     )}
                     <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
-                      <span>ID: {report._id}</span>
-                      {isAdmin && (
+                      <span>ID: {report?._id || '—'}</span>
+                      {isAdmin && report?._id && (
                         <button
                           type="button"
                           onClick={() => onEditReport?.(report)}
