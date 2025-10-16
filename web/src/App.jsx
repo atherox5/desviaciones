@@ -5,6 +5,7 @@ import UsersAdmin from "./pages/UsersAdmin.jsx";
 import ShiftSummary from "./pages/ShiftSummary.jsx";
 import Profile from "./pages/Profile.jsx";
 import Home from "./pages/Home.jsx";
+import ReportsView from "./pages/ReportsView.jsx";
 
 // ==============================================
 // Frontend conectado a API + Exportar a PDF + Visor de Fotos (modal)
@@ -989,7 +990,8 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
             </div>
             <nav className="flex flex-wrap gap-2">
               <NavLink to="/" className={navLinkClass}>Inicio</NavLink>
-              <NavLink to="/reportes" className={navLinkClass}>Reportes</NavLink>
+              <NavLink to="/reportes" end className={navLinkClass}>Nuevo reporte</NavLink>
+              <NavLink to="/reportes/historial" className={navLinkClass}>Historial</NavLink>
               <NavLink to="/dashboard" className={navLinkClass}>Dashboard</NavLink>
               <NavLink to="/resumen-turno" className={navLinkClass}>Resumen de turno</NavLink>
               <NavLink to="/perfil" className={navLinkClass}>Perfil</NavLink>
@@ -1018,6 +1020,7 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
             }
           />
           <Route path="/reportes" element={reportPage} />
+          <Route path="/reportes/historial" element={<ReportsView apiFetch={apiFetch} onAuthError={handleLogout} />} />
           <Route path="/dashboard" element={<Dashboard apiFetch={apiFetch} onAuthError={handleLogout} currentUser={currentUser} />} />
           <Route
             path="/resumen-turno"
