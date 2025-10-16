@@ -7,6 +7,7 @@ import Profile from "./pages/Profile.jsx";
 import Home from "./pages/Home.jsx";
 import ReportsView from "./pages/ReportsView.jsx";
 import ReportDetail from "./pages/ReportDetail.jsx";
+import { AREAS, AREA_LOCATIONS } from "./constants/areas.js";
 
 // ==============================================
 // Frontend conectado a API + Exportar a PDF + Visor de Fotos (modal)
@@ -251,7 +252,6 @@ const horaActual = () => { const d = new Date(); return `${pad2(d.getHours())}:$
 
 const TIPOS = ["Seguridad","Calidad","Medio Ambiente","Mantención","Producción","Logística","Otros"];
 const SEVERIDADES = ["Baja","Media","Alta","Crítica"];
-const AREAS = ["STC", "STR", "Aguas", "Espesadores 410"];
 const ESTADOS = [
   { value: 'pendiente', label: 'Pendiente' },
   { value: 'tratamiento', label: 'En tratamiento' },
@@ -604,6 +604,26 @@ function AppInner() {
     if (!form._id) return true; // nuevo
     return currentUser.role === 'admin' || form.ownerId === currentUser.id;
   }, [currentUser, form._id, form.ownerId]);
+  const locationOptions = AREA_LOCATIONS[form.area] || null;
+  const hasPresetLocation = locationOptions ? locationOptions.includes(form.ubicacion) : false;
+  const showLocationSelect = Boolean(locationOptions) && (!form.ubicacion || hasPresetLocation);
+
+  const handleAreaChange = (value) => {
+    if (!canEdit) return;
+    setForm((prev) => {
+      if (prev.area === value) return prev;
+      if (!value) return { ...prev, area: '', ubicacion: '' };
+      const options = AREA_LOCATIONS[value] || null;
+      if (!options) return { ...prev, area: value, ubicacion: prev.ubicacion };
+      const nextLocation = options.includes(prev.ubicacion) ? prev.ubicacion : '';
+      return { ...prev, area: value, ubicacion: nextLocation };
+    });
+  };
+
+  const handleLocationChange = (value) => {
+    if (!canEdit) return;
+    setForm((prev) => ({ ...prev, ubicacion: value }));
+  };
 
   useEffect(()=>{
     if (!currentUser) return;
@@ -845,8 +865,30 @@ function AppInner() {
             <Campo label="Reportante"><TextInput value={form.reportante} readOnly disabled className="cursor-not-allowed opacity-80" /></Campo>
             <Campo label="Fecha" required><TextInput type="date" value={form.fecha} onChange={(e)=>canEdit && setForm({...form, fecha:e.target.value})} disabled={!canEdit} /></Campo>
             <Campo label="Hora" required><TextInput type="time" value={form.hora} onChange={(e)=>canEdit && setForm({...form, hora:e.target.value})} disabled={!canEdit} /></Campo>
-            <Campo label="Área"><Select value={form.area} onChange={(e)=>canEdit && setForm({...form, area:e.target.value})} disabled={!canEdit}><option value="">Seleccione área…</option>{AREAS.map(a=> <option key={a} value={a}>{a}</option>)}</Select></Campo>
-            <div className="md:col-span-2"><Campo label="Ubicación específica"><TextInput value={form.ubicacion} onChange={(e)=>canEdit && setForm({...form, ubicacion:e.target.value})} disabled={!canEdit} /></Campo></div>
+            <Campo label="Área"><Select value={form.area} onChange={(e)=>handleAreaChange(e.target.value)} disabled={!canEdit}><option value="">Seleccione área…</option>{AREAS.map(a=> <option key={a} value={a}>{a}</option>)}</Select></Campo>
+            <div className="md:col-span-2">
+              <Campo label="Ubicación específica">
+                {showLocationSelect ? (
+                  <Select value={form.ubicacion} onChange={(e)=>handleLocationChange(e.target.value)} disabled={!canEdit}>
+                    <option value="">Seleccione ubicación…</option>
+                    {locationOptions.map((loc) => (
+                      <option key={loc} value={loc}>{loc}</option>
+                    ))}
+                  </Select>
+                ) : (
+                  <TextInput
+                    value={form.ubicacion}
+                    onChange={(e)=>handleLocationChange(e.target.value)}
+                    disabled={!canEdit}
+                    placeholder={locationOptions
+                      ? 'Ubicación fuera de la lista, ingrésala manualmente…'
+                      : form.area
+                        ? 'Ingresa la ubicación específica…'
+                        : 'Selecciona un área para ver ubicaciones'}
+                  />
+                )}
+              </Campo>
+            </div>
           </div>
         )}
 

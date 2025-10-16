@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { AREA_LOCATIONS } from '../constants/areas.js';
 
 const pad2 = (n) => (n < 10 ? `0${n}` : `${n}`);
 const hoyISO = () => {
@@ -29,54 +30,6 @@ function TextArea(props) {
 function Select(props) {
   return <select {...props} className={`w-full bg-gray-800/80 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 ${props.className || ''}`}>{props.children}</select>;
 }
-
-const AREA_LOCATIONS = {
-  Aguas: [
-    'Área 410',
-    'Estación Fija',
-    'Dren Quillayes',
-    'Choapa 1',
-    'Choapa2',
-    'Choapa 3',
-    'Recirculación 2',
-    'Acueducto',
-    'Sentina Muro de cola',
-    'Pozos 7 y 8 Cuncumen',
-    'Cubeta',
-    'Bocatomas',
-    'Rios',
-    'Otros',
-    'Pozos ABQ.',
-  ],
-  STR: [
-    'Novedades reelevantes',
-    'Harneros lineales y válvulas de dardo',
-    'Bombas de impulsión de relaves y agua de sello STR 36"',
-    "Válvulas STR 36\" y ZM's",
-    'Estanques y Agitadores TK-002 / 003',
-    'Estanque y Agitador TK-1004',
-    'Válvulas STR 28"',
-    'Bombas de impulsión de relaves y agua de sello STR 28"',
-    'Cajón y bomba de recuperación de agua de rechazo harneros',
-  ],
-  STC: [
-    'Novedades relevantes',
-    'Bombas PD (Geho), centrífugas de carga y válvulas compresores',
-    'Estanques y agitadores TK-020 / 021 PP007 ST-015 ST-500',
-    'Estaanques TK-115 / 116 PP225/226/227',
-    'Piscinas de emergencias',
-    'Bombas de descarga TK-711',
-  ],
-  'Espesadores 410': [
-    'Novedades relevantes',
-    'Espesadores de relave',
-    'Válvulas de descarga espesadores',
-    'Bombas de floculante',
-    'Estanques de floculante y sistema de preparación',
-    'Cajón distribuidor ST-077',
-    'Bodega de floculante',
-  ],
-};
 
 function Label({ title, children, required }) {
   return (
