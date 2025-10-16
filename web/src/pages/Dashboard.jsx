@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 
 const EMPTY_STATS = { total: 0, byStatus: { pendiente: 0, tratamiento: 0, concluido: 0 }, compliance: 0 };
@@ -26,6 +27,8 @@ export default function Dashboard({ apiFetch, onAuthError, currentUser }) {
   const [stats, setStats] = useState(EMPTY_STATS);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
+
+  const navigate = useNavigate();
 
   const params = useMemo(() => {
     const p = new URLSearchParams();
@@ -190,7 +193,14 @@ export default function Dashboard({ apiFetch, onAuthError, currentUser }) {
         <div className="divide-y divide-gray-800/80">
           {items.map(r => (
             <div key={r._id} className="py-3 flex flex-wrap items-center gap-3 text-sm text-gray-200">
-              <div className="w-28 font-mono text-indigo-200">{r.folio}</div>
+              <button
+                type="button"
+                onClick={()=>navigate(`/reportes/${r._id}`)}
+                className="w-28 font-mono text-indigo-200 text-left hover:text-indigo-100 hover:underline underline-offset-2"
+                title="Ver detalle del reporte"
+              >
+                {r.folio}
+              </button>
               <div className="w-28 text-xs text-gray-400">{r.fecha} {r.hora}</div>
               <div className="flex-1 min-w-[220px]">
                 <div className="font-medium text-white">{r.tipo} · {r.severidad}</div>
