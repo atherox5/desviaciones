@@ -599,7 +599,7 @@ function AppInner() {
   const updateSummaryFn = useCallback((id, payload) => updateSummaryEntry(id, payload), []);
   const updateSelfProfileFn = useCallback((payload) => updateSelfProfile(payload), []);
   const changePasswordFn = useCallback((payload) => changeOwnPassword(payload), []);
-  const fetchOverviewFn = useCallback(() => fetchUsersOverview(), []);
+  const fetchMyReportsFn = useCallback(() => listReports({ owner: 'me' }), []);
 
   // NUEVO: visor de fotos
   const [viewer, setViewer] = useState({ open: false, index: 0 });
@@ -1117,7 +1117,8 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
               <Home
                 currentUser={currentUser}
                 onAuthError={handleLogout}
-                onFetchOverview={fetchOverviewFn}
+                onFetchMyReports={fetchMyReportsFn}
+                onEditReport={openReportFromDetail}
               />
             }
           />

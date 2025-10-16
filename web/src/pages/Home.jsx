@@ -17,60 +17,106 @@ function Avatar({ src, alt }) {
   );
 }
 
-export default function Home({ currentUser, onAuthError, onFetchOverview }) {
-  const [items, setItems] = useState([]);
+export default function Home({ currentUser, onAuthError, onFetchMyReports, onEditReport }) {
+  const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+    async function load() {
+      if (!onFetchMyReports) {
+        setReports([]);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
       try {
-        const data = await onFetchOverview?.();
-        setItems(Array.isArray(data) ? data : []);
+        const data = await onFetchMyReports();
+        if (cancelled) return;
+        setReports(Array.isArray(data) ? data : []);
         setError('');
       } catch (e) {
+        if (cancelled) return;
         console.error(e);
-        const msg = e?.message || 'No se pudo cargar el resumen';
+        const msg = e?.message || 'No se pudo cargar tus reportes';
         setError(msg);
+        setReports([]);
         if (msg.toLowerCase().includes('expirada')) onAuthError?.();
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    })();
-  }, [onFetchOverview, onAuthError, currentUser?.id]);
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [onFetchMyReports, onAuthError, currentUser?.id]);
 
-  const visibleItems = useMemo(() => items.filter((it) => it.role !== 'admin'), [items]);
+  const stats = useMemo(() => {
+    const total = reports.length;
+    const concluded = reports.filter((r) => r.status === 'concluido').length;
+    const inTreatment = reports.filter((r) => r.status === 'tratamiento').length;
+    const pending = reports.filter((r) => r.status === 'pendiente').length;
+    return { total, concluded, inTreatment, pending };
+  }, [reports]);
 
-  const totals = useMemo(() => {
-    return visibleItems.reduce((acc, it) => {
-      acc.reports += it.reports?.total || 0;
-      acc.concluded += it.reports?.concluded || 0;
-      acc.summaries += it.summaries || 0;
-      return acc;
-    }, { reports: 0, concluded: 0, summaries: 0 });
-  }, [visibleItems]);
+  const sortedReports = useMemo(() => {
+    return [...reports].sort((a, b) => {
+      const dateA = new Date(`${a.fecha || ''}T${(a.hora || '00:00')}:00`);
+      const dateB = new Date(`${b.fecha || ''}T${(b.hora || '00:00')}:00`);
+      return dateB - dateA;
+    });
+  }, [reports]);
+
+  const STATUS_META = {
+    pendiente: { label: 'Pendiente', badge: 'bg-slate-700/70 text-slate-200 border border-slate-600/70' },
+    tratamiento: { label: 'En tratamiento', badge: 'bg-amber-500/20 text-amber-200 border border-amber-500/60' },
+    concluido: { label: 'Concluido', badge: 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/60' },
+  };
+
+  const SEVERITY_COLOR = {
+    Baja: 'bg-emerald-600',
+    Media: 'bg-amber-500',
+    Alta: 'bg-orange-600',
+    Crítica: 'bg-red-600',
+  };
+
+  const displayName = currentUser?.fullName?.trim() ? currentUser.fullName : currentUser?.username || 'Usuario';
+  const roleLabel = currentUser?.role === 'admin' ? 'Superusuario' : 'Usuario';
+
+  const handleEditClick = (report) => {
+    if (!report || !currentUser) return;
+    const ownerMatches = report.ownerId && currentUser.id && String(report.ownerId) === String(currentUser.id);
+    if (!ownerMatches) return;
+    onEditReport?.(report);
+  };
+
+  const statCards = [
+    { label: 'Reportes creados', value: stats.total },
+    { label: 'Pendientes', value: stats.pending },
+    { label: 'En tratamiento', value: stats.inTreatment },
+    { label: 'Concluidos', value: stats.concluded },
+  ];
 
   return (
-    <div className="max-w-7xl mx-auto p-4 space-y-6 text-gray-100">
-      <header className="space-y-2 text-center">
-        <h1 className="text-2xl font-bold text-white">Panel inicial</h1>
-        <p className="text-sm text-gray-400">Visión general del avance de reportes y resúmenes.</p>
-      </header>
-
-      <section className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-300">
-        <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-400">Reportes concluidos / totales</div>
-          <div className="text-2xl font-semibold text-white mt-2">{totals.concluded} / {totals.reports}</div>
-        </div>
-        <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-400">Porcentaje global de cumplimiento</div>
-          <div className="text-2xl font-semibold text-white mt-2">
-            {totals.reports ? Math.round((totals.concluded * 10000) / totals.reports) / 100 : 0}%
+    <div className="max-w-6xl mx-auto p-4 space-y-6 text-gray-100">
+      <section className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-4">
+          <Avatar src={currentUser?.photoUrl} alt={displayName} />
+          <div>
+            <h1 className="text-2xl font-bold text-white">{displayName}</h1>
+            <div className="text-sm text-gray-400">{currentUser?.username}</div>
+            <div className="text-xs text-gray-500 mt-1 uppercase tracking-wide">{roleLabel}</div>
           </div>
         </div>
-        <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4">
-          <div className="text-xs uppercase text-gray-400">Resúmenes de turno creados</div>
-          <div className="text-2xl font-semibold text-white mt-2">{totals.summaries}</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full md:w-auto">
+          {statCards.map((card) => (
+            <div key={card.label} className="bg-gray-800/70 border border-gray-700 rounded-xl px-4 py-3 text-center">
+              <div className="text-xs uppercase text-gray-400 tracking-wide">{card.label}</div>
+              <div className="text-xl font-semibold text-white mt-1">{card.value}</div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -80,47 +126,93 @@ export default function Home({ currentUser, onAuthError, onFetchOverview }) {
         </div>
       )}
 
-      {loading ? (
-        <div className="text-sm text-gray-400">Cargando información…</div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {visibleItems.map((user) => {
-            const total = user.reports?.total || 0;
-            const concluded = user.reports?.concluded || 0;
-            const percent = total ? Math.round((concluded * 1000) / total) / 10 : 0;
-            return (
-              <article key={user.id} className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4 flex flex-col gap-3">
-                <div className="flex items-center gap-3">
-                  <Avatar src={user.photoUrl} alt={user.fullName || user.username} />
-                  <div>
-                    <div className="text-base font-semibold text-white">{user.fullName || user.username}</div>
-                    <div className="text-xs text-gray-400">{user.username} · {user.role === 'admin' ? 'Superusuario' : 'Usuario'}</div>
+      <section className="space-y-4">
+        <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-white">Mis reportes</h2>
+            <p className="text-sm text-gray-400">Revisa y edita únicamente los reportes que creaste.</p>
+          </div>
+          <div className="text-xs text-gray-400 bg-gray-900/60 border border-gray-800 rounded-xl px-3 py-1.5">
+            Mostrando {sortedReports.length} registros
+          </div>
+        </header>
+
+        {loading ? (
+          <div className="bg-gray-900/40 border border-gray-800 rounded-xl px-4 py-6 text-center text-sm text-gray-300">
+            Cargando tus reportes…
+          </div>
+        ) : sortedReports.length === 0 ? (
+          <div className="bg-gray-900/40 border border-gray-800 rounded-xl px-4 py-6 text-center text-sm text-gray-400">
+            Aún no registras reportes. ¡Crea el primero desde la sección “Nuevo reporte”!
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {sortedReports.map((report) => {
+              const statusInfo = STATUS_META[report.status] || STATUS_META.pendiente;
+              const severity = SEVERITY_COLOR[report.severidad] || 'bg-indigo-600';
+              const ownerMatches = report.ownerId && currentUser?.id && String(report.ownerId) === String(currentUser.id);
+              const summary = String(report.descripcion || '').trim();
+              return (
+                <article key={report._id} className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5 shadow-lg shadow-black/10 space-y-4">
+                  <header className="flex flex-wrap items-center gap-3 justify-between">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-lg font-semibold text-white font-mono">{report.folio || 'Sin folio'}</span>
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${statusInfo.badge}`}>
+                        {statusInfo.label}
+                      </span>
+                      <span className={`inline-flex items-center rounded-full ${severity} text-white px-2.5 py-1 text-xs font-semibold`}>
+                        {report.severidad || '—'}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-400">{report.fecha || '—'} · {report.hora || '—'}</div>
+                  </header>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-300">
+                    <Info label="Área">{report.area || '—'}</Info>
+                    <Info label="Ubicación">{report.ubicacion || '—'}</Info>
+                    <Info label="Tipo">{report.tipo || '—'}</Info>
+                    <Info label="Responsable">{report.responsable || '—'}</Info>
+                    <Info label="Número SAP">{report.sapAviso || '—'}</Info>
+                    <Info label="Fecha compromiso">{report.compromiso || '—'}</Info>
                   </div>
-                </div>
-                <div className="text-sm text-gray-300">
-                  <div className="flex items-center justify-between mb-1">
-                    <span>Avance reportes</span>
-                    <span className="text-white font-medium">{percent}%</span>
-                  </div>
-                  <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500" style={{ width: `${Math.min(percent, 100)}%` }} />
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1">Concluidos: {concluded} / {total}</div>
-                </div>
-                <div className="text-sm text-gray-300">
-                  Resúmenes creados: <span className="text-white font-semibold">{user.summaries}</span>
-                </div>
-              </article>
-            );
-          })}
-          {items.length === 0 && !loading && (
-            <div className="text-sm text-gray-400 col-span-full">No hay usuarios registrados.</div>
-          )}
-          {items.length > 0 && visibleItems.length === 0 && !loading && (
-            <div className="text-sm text-gray-400 col-span-full">No hay usuarios registrados.</div>
-          )}
-        </div>
-      )}
+
+                  {summary && (
+                    <div className="text-sm text-gray-200 bg-gray-800/60 border border-gray-700 rounded-xl p-3">
+                      <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Descripción</div>
+                      <p className="leading-relaxed">{summary}</p>
+                    </div>
+                  )}
+
+                  <footer className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-xs text-gray-500">ID: {report._id}</div>
+                    <button
+                      type="button"
+                      onClick={() => handleEditClick(report)}
+                      disabled={!ownerMatches}
+                      className={`px-4 py-2 rounded-xl text-sm ${
+                        ownerMatches
+                          ? 'bg-indigo-600 hover:bg-indigo-500 text-white transition'
+                          : 'bg-gray-700/60 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      Editar
+                    </button>
+                  </footer>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function Info({ label, children }) {
+  return (
+    <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-3">
+      <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">{label}</div>
+      <div className="text-white font-medium">{children}</div>
     </div>
   );
 }
