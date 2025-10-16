@@ -6,6 +6,7 @@ import ShiftSummary from "./pages/ShiftSummary.jsx";
 import Profile from "./pages/Profile.jsx";
 import Home from "./pages/Home.jsx";
 import ReportsView from "./pages/ReportsView.jsx";
+import ReportDetail from "./pages/ReportDetail.jsx";
 
 // ==============================================
 // Frontend conectado a API + Exportar a PDF + Visor de Fotos (modal)
@@ -781,6 +782,13 @@ function AppInner() {
     }
   }
 
+  const openReportFromDetail = (data) => {
+    if (data) {
+      onLoadReport(data);
+      navigate('/reportes');
+    }
+  };
+
   const filtered = useMemo(()=> items, [items]);
 
   if (booting) {
@@ -948,16 +956,34 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
             </label>
           </div>
           <div className="mt-2 max-h-[420px] overflow-auto pr-1 space-y-2">
-                {filtered.map((it)=> (
-                  <div key={it._id} className="bg-gray-800/60 border border-gray-700 rounded-xl p-3 flex items-start gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap"><span className="text-white font-semibold text-sm">{it.folio}</span><Badge>{it.severidad}</Badge><Badge color={ESTADO_COLOR[it.status] || 'bg-slate-600'}>{ESTADO_LABEL[it.status] || 'Pendiente'}</Badge></div>
+            {filtered.map((it)=> (
+              <div
+                key={it._id}
+                role="button"
+                tabIndex={0}
+                onClick={()=>navigate(`/reportes/${it._id}`)}
+                onKeyDown={(e)=>{ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/reportes/${it._id}`); } }}
+                className="bg-gray-800/60 border border-gray-700 rounded-xl p-3 flex items-start gap-3 cursor-pointer hover:border-indigo-500/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap"><span className="text-white font-semibold text-sm">{it.folio}</span><Badge>{it.severidad}</Badge><Badge color={ESTADO_COLOR[it.status] || 'bg-slate-600'}>{ESTADO_LABEL[it.status] || 'Pendiente'}</Badge></div>
                   <div className="text-xs text-gray-300 mt-1 flex flex-wrap gap-2"><span>{it.fecha} {it.hora}</span><span>• {it.tipo}</span><span>• {it.area||'(sin área)'}</span><span>• {it.ownerName||'—'}</span></div>
                   <div className="text-xs text-gray-400 line-clamp-2 mt-1">{it.descripcion}</div>
                 </div>
                 <div className="flex flex-col gap-2 w-28">
-                  <button onClick={()=>onLoadReport(it)} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-1">Abrir</button>
-                  <button onClick={()=>onDeleteReport(it)} disabled={!(currentUser.role==='admin' || it.ownerId===currentUser.id)} className="text-xs bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white rounded-lg py-1">Eliminar</button>
+                  <button
+                    onClick={(e)=>{ e.stopPropagation(); onLoadReport(it); }}
+                    className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-1"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    onClick={(e)=>{ e.stopPropagation(); onDeleteReport(it); }}
+                    disabled={!(currentUser.role==='admin' || it.ownerId===currentUser.id)}
+                    className="text-xs bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white rounded-lg py-1"
+                  >
+                    Eliminar
+                  </button>
                 </div>
               </div>
             ))}
@@ -1021,6 +1047,17 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
           />
           <Route path="/reportes" element={reportPage} />
           <Route path="/reportes/historial" element={<ReportsView apiFetch={apiFetch} onAuthError={handleLogout} />} />
+          <Route
+            path="/reportes/:id"
+            element={
+              <ReportDetail
+                apiFetch={apiFetch}
+                onAuthError={handleLogout}
+                onEdit={openReportFromDetail}
+                currentUser={currentUser}
+              />
+            }
+          />
           <Route path="/dashboard" element={<Dashboard apiFetch={apiFetch} onAuthError={handleLogout} currentUser={currentUser} />} />
           <Route
             path="/resumen-turno"
