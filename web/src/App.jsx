@@ -98,10 +98,15 @@ async function authStatus() {
   return res.json();
 }
 
-async function listReports({ owner } = {}) {
+async function listReports(params = {}) {
   const q = new URLSearchParams();
-  if (owner) q.set("owner", owner);
-  const res = await apiFetch(`/reports?${q.toString()}`);
+  if (params.owner) q.set("owner", params.owner);
+  if (params.scope) q.set("scope", params.scope);
+  if (params.status) q.set("status", params.status);
+  if (params.limit) q.set("limit", String(params.limit));
+  if (params.q) q.set("q", params.q);
+  const queryStr = q.toString();
+  const res = await apiFetch(`/reports${queryStr ? `?${queryStr}` : ''}`);
   if (!res.ok) throw new Error("No se pudo listar");
   return res.json();
 }
@@ -600,6 +605,7 @@ function AppInner() {
   const updateSelfProfileFn = useCallback((payload) => updateSelfProfile(payload), []);
   const changePasswordFn = useCallback((payload) => changeOwnPassword(payload), []);
   const fetchMyReportsFn = useCallback(() => listReports({ owner: 'me' }), []);
+  const fetchFeedReportsFn = useCallback(() => listReports({ scope: 'feed', limit: 100 }), []);
 
   // NUEVO: visor de fotos
   const [viewer, setViewer] = useState({ open: false, index: 0 });
@@ -1117,8 +1123,7 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
               <Home
                 currentUser={currentUser}
                 onAuthError={handleLogout}
-                onFetchMyReports={fetchMyReportsFn}
-                onEditReport={openReportFromDetail}
+                onFetchReports={fetchFeedReportsFn}
               />
             }
           />

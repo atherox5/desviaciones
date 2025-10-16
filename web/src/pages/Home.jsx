@@ -17,7 +17,7 @@ function Avatar({ src, alt }) {
   );
 }
 
-export default function Home({ currentUser, onAuthError, onFetchMyReports, onEditReport }) {
+export default function Home({ currentUser, onAuthError, onFetchReports }) {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -25,14 +25,14 @@ export default function Home({ currentUser, onAuthError, onFetchMyReports, onEdi
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!onFetchMyReports) {
+      if (!onFetchReports) {
         setReports([]);
         setLoading(false);
         return;
       }
       setLoading(true);
       try {
-        const data = await onFetchMyReports();
+        const data = await onFetchReports();
         if (cancelled) return;
         setReports(Array.isArray(data) ? data : []);
         setError('');
@@ -51,7 +51,7 @@ export default function Home({ currentUser, onAuthError, onFetchMyReports, onEdi
     return () => {
       cancelled = true;
     };
-  }, [onFetchMyReports, onAuthError, currentUser?.id]);
+  }, [onFetchReports, onAuthError, currentUser?.id]);
 
   const stats = useMemo(() => {
     const total = reports.length;
@@ -84,13 +84,6 @@ export default function Home({ currentUser, onAuthError, onFetchMyReports, onEdi
 
   const displayName = currentUser?.fullName?.trim() ? currentUser.fullName : currentUser?.username || 'Usuario';
   const roleLabel = currentUser?.role === 'admin' ? 'Superusuario' : 'Usuario';
-
-  const handleEditClick = (report) => {
-    if (!report || !currentUser) return;
-    const ownerMatches = report.ownerId && currentUser.id && String(report.ownerId) === String(currentUser.id);
-    if (!ownerMatches) return;
-    onEditReport?.(report);
-  };
 
   const statCards = [
     { label: 'Reportes creados', value: stats.total },
@@ -150,7 +143,6 @@ export default function Home({ currentUser, onAuthError, onFetchMyReports, onEdi
             {sortedReports.map((report) => {
               const statusInfo = STATUS_META[report.status] || STATUS_META.pendiente;
               const severity = SEVERITY_COLOR[report.severidad] || 'bg-indigo-600';
-              const ownerMatches = report.ownerId && currentUser?.id && String(report.ownerId) === String(currentUser.id);
               const summary = String(report.descripcion || '').trim();
               return (
                 <article key={report._id} className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5 shadow-lg shadow-black/10 space-y-4">
@@ -185,18 +177,6 @@ export default function Home({ currentUser, onAuthError, onFetchMyReports, onEdi
 
                   <footer className="flex flex-wrap items-center justify-between gap-3">
                     <div className="text-xs text-gray-500">ID: {report._id}</div>
-                    <button
-                      type="button"
-                      onClick={() => handleEditClick(report)}
-                      disabled={!ownerMatches}
-                      className={`px-4 py-2 rounded-xl text-sm ${
-                        ownerMatches
-                          ? 'bg-indigo-600 hover:bg-indigo-500 text-white transition'
-                          : 'bg-gray-700/60 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      Editar
-                    </button>
                   </footer>
                 </article>
               );

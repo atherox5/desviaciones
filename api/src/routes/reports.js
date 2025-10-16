@@ -123,6 +123,8 @@ router.get('/next-folio', async (req, res) => {
 // listado con filtros (owner/q/fecha/limit)
 router.get('/', async (req, res) => {
   const owner = req.query.owner;
+  const scope = (req.query.scope || '').toString().trim();
+  const isFeed = scope === 'feed';
   const q = (req.query.q || '').toString().trim();
   const limit = Math.min(Number(req.query.limit) || 50, 200);
 
@@ -133,8 +135,12 @@ router.get('/', async (req, res) => {
     if (allowedStatus.includes(status)) filter.status = status;
   }
 
-  if (req.user.role !== 'admin') filter.ownerId = req.user.id;
-  else if (owner === 'me') filter.ownerId = req.user.id;
+  if (!isFeed) {
+    if (req.user.role !== 'admin') filter.ownerId = req.user.id;
+    else if (owner === 'me') filter.ownerId = req.user.id;
+  } else if (owner === 'me') {
+    filter.ownerId = req.user.id;
+  }
 
   if (q) {
     filter.$or = [
@@ -149,7 +155,30 @@ router.get('/', async (req, res) => {
     ];
   }
 
-  const items = await Report.find(filter).sort({ createdAt: -1 }).limit(limit);
+  const projection = isFeed ? {
+    folio: 1,
+    fecha: 1,
+    hora: 1,
+    area: 1,
+    ubicacion: 1,
+    tipo: 1,
+    severidad: 1,
+    descripcion: 1,
+    acciones: 1,
+    causas: 1,
+    responsable: 1,
+    compromiso: 1,
+    tags: 1,
+    status: 1,
+    fotos: 1,
+    ownerName: 1,
+    ownerId: 1,
+    sapAviso: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  } : undefined;
+
+  const items = await Report.find(filter, projection).sort({ createdAt: -1 }).limit(limit);
   res.json(items);
 });
 
