@@ -1124,6 +1124,7 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
                 currentUser={currentUser}
                 onAuthError={handleLogout}
                 onFetchReports={fetchFeedReportsFn}
+                onEditReport={openReportFromDetail}
               />
             }
           />

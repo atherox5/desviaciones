@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 function Avatar({ src, alt }) {
   if (src) {
@@ -17,7 +18,7 @@ function Avatar({ src, alt }) {
   );
 }
 
-export default function Home({ currentUser, onAuthError, onFetchReports }) {
+export default function Home({ currentUser, onAuthError, onFetchReports, onEditReport }) {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -150,10 +151,16 @@ export default function Home({ currentUser, onAuthError, onFetchReports }) {
               {sortedReports.map((report) => {
                 const statusInfo = STATUS_META[report.status] || STATUS_META.pendiente;
                 const severity = SEVERITY_COLOR[report.severidad] || 'bg-indigo-600';
+                const summary = String(report.descripcion || '').trim();
                 return (
-                  <article key={report._id} className="py-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between text-sm text-gray-200">
+                  <article key={report._id} className="py-4 flex flex-col gap-4 text-sm text-gray-200">
                     <div className="flex-1 flex flex-wrap items-center gap-3">
-                      <span className="font-mono text-indigo-200 text-base">{report.folio || 'Sin folio'}</span>
+                      <Link
+                        to={`/reportes/${report._id}`}
+                        className="font-mono text-indigo-200 text-base hover:text-indigo-100 hover:underline underline-offset-2"
+                      >
+                        {report.folio || 'Sin folio'}
+                      </Link>
                       <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${statusInfo.badge}`}>
                         {statusInfo.label}
                       </span>
@@ -170,7 +177,24 @@ export default function Home({ currentUser, onAuthError, onFetchReports }) {
                       <Info label="Responsable">{report.responsable || '—'}</Info>
                       <Info label="Creado por">{report.ownerName || '—'}</Info>
                     </div>
-                    <div className="text-xs text-gray-500">ID: {report._id}</div>
+                    {summary && (
+                      <div className="max-w-3xl text-xs text-gray-300 leading-relaxed bg-gray-900/60 border border-gray-800 rounded-xl px-3 py-2">
+                        <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Descripción</div>
+                        <p>{summary}</p>
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                      <span>ID: {report._id}</span>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => onEditReport?.(report)}
+                          className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs transition"
+                        >
+                          Editar
+                        </button>
+                      )}
+                    </div>
                   </article>
                 );
               })}
