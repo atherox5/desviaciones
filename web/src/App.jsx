@@ -1164,7 +1164,7 @@ Fecha compromiso: ${form.compromiso}`:'')}</div></div>
         </Routes>
       </div>
 
-      {location.pathname === "/" && viewer.open && (
+      {viewer.open && (
         <Lightbox
           photos={form.fotos}
           index={viewer.index}
