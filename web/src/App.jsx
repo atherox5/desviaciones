@@ -24,10 +24,18 @@ const API = (() => {
   if (envUrl) return envUrl.replace(/\/$/, '');
 
   if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    const isLocalHost = ['localhost', '127.0.0.1', '0.0.0.0'].includes(host);
-    if (isLocalHost) return 'http://localhost:8081/api';
-    return '/api';
+    const { hostname, protocol, port, origin } = window.location;
+    const isLocalHost = ['localhost', '127.0.0.1', '0.0.0.0'].includes(hostname);
+    const isDevPort = ['5173', '4173', '3000'].includes(port);
+    if (isLocalHost || isDevPort) {
+      const baseHost = isLocalHost ? 'localhost' : hostname;
+      return `${protocol}//${baseHost}:8081/api`;
+    }
+
+    const meta = document.querySelector('meta[name="app-api-base-url"]')?.getAttribute('content')?.trim();
+    if (meta) return meta.replace(/\/$/, '');
+
+    return `${origin.replace(/\/$/, '')}/api`;
   }
 
   return 'http://localhost:8081/api';
