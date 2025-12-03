@@ -88,13 +88,15 @@ async function exportReportPDF(r) {
     doc.text('Evidencias', margin, y);
     y += 14;
 
-    const cellW = (pageW - margin * 2 - 12) / 2;
-    const cellH = 110;
+    const gap = 12;
+    const cellSize = Math.min((pageW - margin * 2 - gap) / 2, 220); // 2 por fila, cuadradas
+    const cellW = cellSize;
+    const cellH = cellSize;
     for (let i = 0; i < r.fotos.length; i += 1) {
       if (y > pageH - margin - cellH) { doc.addPage(); y = margin; }
       const col = i % 2;
-      if (col === 0 && i > 0) y += cellH + 16;
-      const x = margin + col * (cellW + 12);
+      if (col === 0 && i > 0) y += cellH + gap;
+      const x = margin + col * (cellW + gap);
       const f = r.fotos[i];
       const dataUrl = await dataURLFromURL(f.url);
       if (dataUrl) {
@@ -103,7 +105,7 @@ async function exportReportPDF(r) {
         }
       }
     }
-    y += cellH + 10;
+    y += cellH + gap;
   }
 
   const nombre = (r.folio || `reporte_${Date.now()}`).replace(/[^A-Za-z0-9_-]/g, '_') + '.pdf';
