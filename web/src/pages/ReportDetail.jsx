@@ -14,17 +14,36 @@ const SEVERITY_COLOR = {
   Crítica: 'bg-red-600',
 };
 
-async function dataURLFromURL(url) {
+async function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function dataURLFromURL(url, { maxEdge = 1200, quality = 0.72 } = {}) {
   if (!url) return null;
   if (url.startsWith('data:')) return url;
   try {
     const res = await fetch(url);
     const blob = await res.blob();
-    return await new Promise((resolve) => {
-      const fr = new FileReader();
-      fr.onload = () => resolve(fr.result);
-      fr.readAsDataURL(blob);
-    });
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const img = await loadImage(objectUrl);
+      const ratio = Math.min(1, maxEdge / Math.max(img.width, img.height));
+      const canvasW = Math.max(1, Math.round(img.width * ratio));
+      const canvasH = Math.max(1, Math.round(img.height * ratio));
+      const canvas = document.createElement('canvas');
+      canvas.width = canvasW;
+      canvas.height = canvasH;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvasW, canvasH);
+      return canvas.toDataURL('image/jpeg', quality);
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
   } catch {
     return null;
   }
@@ -32,7 +51,7 @@ async function dataURLFromURL(url) {
 
 async function exportReportPDF(r) {
   const { default: jsPDF } = await import('jspdf');
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const doc = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
   const margin = 40;
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -83,7 +102,7 @@ async function exportReportPDF(r) {
 
   if (r.fotos && r.fotos.length) {
     const gap = 12;
-    const cellSize = Math.min((pageW - margin * 2 - gap) / 2, 220); // 2 por fila, cuadradas
+    const cellSize = Math.min((pageW - margin * 2 - gap) / 2, 200); // 2 por fila, cuadradas
     const perRow = 2;
 
     // Si no cabe una fila entera en la página actual, arranca la sección en una nueva página
