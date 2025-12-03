@@ -82,19 +82,22 @@ async function exportReportPDF(r) {
   if (r.tags) addSection('Tags', r.tags);
 
   if (r.fotos && r.fotos.length) {
-    if (y > pageH - margin - 24) { doc.addPage(); y = margin; }
+    const gap = 12;
+    const cellSize = Math.min((pageW - margin * 2 - gap) / 2, 220); // 2 por fila, cuadradas
+    const perRow = 2;
+
+    // Si no cabe una fila entera en la página actual, arranca la sección en una nueva página
+    if (y > pageH - margin - (cellSize + gap + 10)) { doc.addPage(); y = margin; }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.text('Evidencias', margin, y);
     y += 14;
 
-    const gap = 12;
-    const cellSize = Math.min((pageW - margin * 2 - gap) / 2, 220); // 2 por fila, cuadradas
     const cellW = cellSize;
     const cellH = cellSize;
-    const perRow = 2;
     for (let i = 0; i < r.fotos.length; ) {
-      if (y + cellH > pageH - margin) { doc.addPage(); y = margin; }
+      const available = pageH - margin - y;
+      if (available < cellH) { doc.addPage(); y = margin; }
       const itemsInRow = Math.min(perRow, r.fotos.length - i);
       const rowWidth = itemsInRow * cellW + (itemsInRow - 1) * gap;
       const startX = margin + Math.max(0, (pageW - margin * 2 - rowWidth) / 2);
@@ -111,7 +114,8 @@ async function exportReportPDF(r) {
       }
 
       i += itemsInRow;
-      y += cellH + gap;
+      y += cellH;
+      if (i < r.fotos.length) y += gap; // solo agrega espacio si quedan filas
     }
   }
 
