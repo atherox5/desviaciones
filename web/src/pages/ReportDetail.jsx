@@ -14,6 +14,102 @@ const SEVERITY_COLOR = {
   Crítica: 'bg-red-600',
 };
 
+async function dataURLFromURL(url) {
+  if (!url) return null;
+  if (url.startsWith('data:')) return url;
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    return await new Promise((resolve) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function exportReportPDF(r) {
+  const { default: jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const margin = 40;
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  let y = margin;
+
+  const addTitle = (t) => { doc.setFontSize(16); doc.setFont('helvetica', 'bold'); doc.text(t, margin, y); y += 22; };
+  const addKV = (left, right) => { doc.setFontSize(11); doc.setFont('helvetica', 'normal'); doc.text(left, margin, y); doc.text(right, pageW / 2, y); y += 16; };
+  const addSection = (title, body) => {
+    if (!body) return;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text(title, margin, y);
+    y += 14;
+    doc.setFont('helvetica', 'normal');
+    const lines = doc.splitTextToSize(body, pageW - margin * 2);
+    for (const line of lines) {
+      if (y > pageH - margin) { doc.addPage(); y = margin; }
+      doc.text(line, margin, y);
+      y += 14;
+    }
+    y += 6;
+  };
+  const addBadge = (label) => {
+    const w = doc.getTextWidth(label) + 14;
+    const h = 18;
+    if (y > pageH - margin) { doc.addPage(); y = margin; }
+    doc.setFillColor(76, 29, 149);
+    doc.roundedRect(pageW - margin - w, margin - 4, w, h, 6, 6, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.text(label, pageW - margin - w + 7, margin + 9);
+    doc.setTextColor(0, 0, 0);
+  };
+
+  addTitle('Reporte de Desviaciones');
+  addBadge(r.severidad || '-');
+  addKV(`Folio: ${r.folio || '-'}`, `Fecha/Hora: ${r.fecha || '-'} ${r.hora || ''}`);
+  addKV(`Propietario: ${r.ownerName || '-'}`, `Tipo: ${r.tipo || '-'}`);
+  addKV(`Área: ${r.area || '-'}`, `Ubicación: ${r.ubicacion || '-'}`);
+  y += 8;
+
+  addSection('Descripción', r.descripcion);
+  addSection('Causas', r.causas);
+  addSection('Acciones / contención', r.acciones);
+  addSection('Responsable', r.responsable);
+  if (r.compromiso) addSection('Fecha compromiso', r.compromiso);
+  if (r.tags) addSection('Tags', r.tags);
+
+  if (r.fotos && r.fotos.length) {
+    if (y > pageH - margin - 24) { doc.addPage(); y = margin; }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('Evidencias', margin, y);
+    y += 14;
+
+    const cellW = (pageW - margin * 2 - 12) / 2;
+    const cellH = 110;
+    for (let i = 0; i < r.fotos.length; i += 1) {
+      if (y > pageH - margin - cellH) { doc.addPage(); y = margin; }
+      const col = i % 2;
+      if (col === 0 && i > 0) y += cellH + 16;
+      const x = margin + col * (cellW + 12);
+      const f = r.fotos[i];
+      const dataUrl = await dataURLFromURL(f.url);
+      if (dataUrl) {
+        try { doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST'); } catch {
+          try { doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST'); } catch { /* ignore */ }
+        }
+      }
+    }
+    y += cellH + 10;
+  }
+
+  const nombre = (r.folio || `reporte_${Date.now()}`).replace(/[^A-Za-z0-9_-]/g, '_') + '.pdf';
+  doc.save(nombre);
+}
+
 export default function ReportDetail({ apiFetch, onAuthError, onEdit, currentUser }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -96,6 +192,14 @@ export default function ReportDetail({ apiFetch, onAuthError, onEdit, currentUse
             className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm border border-indigo-500"
           >
             Editar reporte
+          </button>
+        )}
+        {report && (
+          <button
+            onClick={() => exportReportPDF(report)}
+            className="px-3 py-2 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-sm border border-fuchsia-500"
+          >
+            Descargar PDF
           </button>
         )}
       </div>
