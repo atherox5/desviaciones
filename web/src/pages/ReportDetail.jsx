@@ -92,20 +92,27 @@ async function exportReportPDF(r) {
     const cellSize = Math.min((pageW - margin * 2 - gap) / 2, 220); // 2 por fila, cuadradas
     const cellW = cellSize;
     const cellH = cellSize;
-    for (let i = 0; i < r.fotos.length; i += 1) {
-      if (y > pageH - margin - cellH) { doc.addPage(); y = margin; }
-      const col = i % 2;
-      if (col === 0 && i > 0) y += cellH + gap;
-      const x = margin + col * (cellW + gap);
-      const f = r.fotos[i];
-      const dataUrl = await dataURLFromURL(f.url);
-      if (dataUrl) {
-        try { doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST'); } catch {
-          try { doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST'); } catch { /* ignore */ }
+    const perRow = 2;
+    for (let i = 0; i < r.fotos.length; ) {
+      if (y + cellH > pageH - margin) { doc.addPage(); y = margin; }
+      const itemsInRow = Math.min(perRow, r.fotos.length - i);
+      const rowWidth = itemsInRow * cellW + (itemsInRow - 1) * gap;
+      const startX = margin + Math.max(0, (pageW - margin * 2 - rowWidth) / 2);
+
+      for (let col = 0; col < itemsInRow; col += 1) {
+        const photo = r.fotos[i + col];
+        const x = startX + col * (cellW + gap);
+        const dataUrl = await dataURLFromURL(photo.url);
+        if (dataUrl) {
+          try { doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST'); } catch {
+            try { doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST'); } catch { /* ignore */ }
+          }
         }
       }
+
+      i += itemsInRow;
+      y += cellH + gap;
     }
-    y += cellH + gap;
   }
 
   const nombre = (r.folio || `reporte_${Date.now()}`).replace(/[^A-Za-z0-9_-]/g, '_') + '.pdf';
