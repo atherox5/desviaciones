@@ -35,7 +35,6 @@ const ReportSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-ReportSchema.index({ folio: 1 }, { unique: true });
 ReportSchema.index({ createdAt: -1 });
 
 export default mongoose.model('Report', ReportSchema);
