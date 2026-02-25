@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import { z } from 'zod';
 import Report from '../models/Report.js';
 import { authRequired } from '../middleware/auth.js';
@@ -304,7 +305,13 @@ router.patch('/:id/status', async (req, res) => {
 router.get('/stats/summary', async (req, res) => {
   const filter = buildDateFilter(req.query);
   // dueños ven sólo lo suyo; admin ve todo
-  if (req.user.role !== 'admin') filter.ownerId = req.user.id;
+  if (req.user.role !== 'admin') {
+    if (!mongoose.Types.ObjectId.isValid(req.user.id)) {
+      return res.status(400).json({ error: 'Usuario inválido' });
+    }
+    // aggregate() no castea automáticamente strings a ObjectId
+    filter.ownerId = new mongoose.Types.ObjectId(req.user.id);
+  }
 
   const pipeline = [
     { $match: filter },
