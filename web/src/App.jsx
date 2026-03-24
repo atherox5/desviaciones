@@ -554,6 +554,7 @@ async function exportReportPDF(r) {
     }
     y += 6;
   };
+  const sapValue = r.sapAviso || r.sap || r.avisoSap || r.numeroAviso || '-';
   const addBadge = (label) => { const w = doc.getTextWidth(label)+14; const h=18; if (y > pageH - margin) { doc.addPage(); y = margin; }
     doc.setFillColor(76, 29, 149); // indigo-900
     doc.roundedRect(pageW - margin - w, margin-4, w, h, 6, 6, 'F');
@@ -566,7 +567,7 @@ async function exportReportPDF(r) {
   addKV(`Folio: ${r.folio || '-'}`, `Fecha/Hora: ${(r.fecha||'-')} ${(r.hora||'')}`);
   addKV(`Propietario: ${r.ownerName || '-'}`, `Tipo: ${r.tipo || '-'}`);
   addKV(`Área: ${r.area || '-'}`, `Ubicación: ${r.ubicacion || '-'}`);
-  addKV(`N° Aviso SAP/Reporte: ${r.sapAviso || '-'}`, `Estado: ${r.status || '-'}`);
+  addKV(`Nro. Aviso SAP/Reporte: ${sapValue}`, `Estado: ${r.status || '-'}`);
   y += 8;
 
   addSection('Descripción', r.descripcion);
@@ -596,9 +597,9 @@ async function exportReportPDF(r) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       const captionLinesByPhoto = photosInRow.map((photo) => {
-        const note = String(photo?.nota || '').trim();
-        if (!note) return [];
-        return doc.splitTextToSize(`Descripción: ${note}`, cellW);
+        const note = String(photo?.nota || photo?.descripcion || photo?.description || '').trim();
+        const caption = note ? `Descripción: ${note}` : 'Descripción: -';
+        return doc.splitTextToSize(caption, cellW);
       });
       const maxCaptionLines = captionLinesByPhoto.reduce((max, lines) => Math.max(max, lines.length), 0);
       const captionHeight = maxCaptionLines > 0 ? captionTopGap + maxCaptionLines * captionLeading : 0;

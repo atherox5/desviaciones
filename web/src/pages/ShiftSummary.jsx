@@ -407,9 +407,9 @@ export default function ShiftSummary({
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(7);
             const captionLinesByPhoto = photosInRow.map((foto) => {
-              const note = String(foto?.nota || '').trim();
-              if (!note) return [];
-              return doc.splitTextToSize(`Descripción: ${note}`, cellW);
+              const note = String(foto?.nota || foto?.descripcion || foto?.description || '').trim();
+              const caption = note ? `Descripción: ${note}` : 'Descripción: -';
+              return doc.splitTextToSize(caption, cellW);
             });
             const maxCaptionLines = captionLinesByPhoto.reduce((max, lines) => Math.max(max, lines.length), 0);
             const captionHeight = maxCaptionLines > 0 ? captionTopGap + maxCaptionLines * captionLeading : 0;
