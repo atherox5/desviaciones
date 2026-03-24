@@ -566,6 +566,7 @@ async function exportReportPDF(r) {
   addKV(`Folio: ${r.folio || '-'}`, `Fecha/Hora: ${(r.fecha||'-')} ${(r.hora||'')}`);
   addKV(`Propietario: ${r.ownerName || '-'}`, `Tipo: ${r.tipo || '-'}`);
   addKV(`Área: ${r.area || '-'}`, `Ubicación: ${r.ubicacion || '-'}`);
+  addKV(`N° Aviso SAP/Reporte: ${r.sapAviso || '-'}`, `Estado: ${r.status || '-'}`);
   y += 8;
 
   addSection('Descripción', r.descripcion);
@@ -580,21 +581,53 @@ async function exportReportPDF(r) {
     if (y > pageH - margin - 24) { doc.addPage(); y = margin; }
     doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text('Evidencias', margin, y); y += 14;
 
-    const cellW = (pageW - margin*2 - 20) / 3; // 3 por fila
+    const perRow = 3;
+    const gapX = 10;
+    const gapY = 20;
+    const cellW = (pageW - margin * 2 - gapX * (perRow - 1)) / perRow;
     const cellH = 110;
-    for (let i=0;i<r.fotos.length;i++) {
-      if (y > pageH - margin - cellH) { doc.addPage(); y = margin; }
-      const col = i % 3; if (col === 0 && i>0) y += cellH + 20;
-      const x = margin + col * (cellW + 10);
-      const f = r.fotos[i];
-      const dataUrl = await dataURLFromURL(f.url);
-      if (dataUrl) {
-        try { doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST'); } catch {
-          try { doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST'); } catch {}
+    const captionTopGap = 6;
+    const captionLeading = 10;
+    for (let i = 0; i < r.fotos.length; ) {
+      const photosInRow = r.fotos.slice(i, i + perRow);
+      const itemsInRow = photosInRow.length;
+      const rowWidth = itemsInRow * cellW + (itemsInRow - 1) * gapX;
+      const startX = margin + Math.max(0, (contentW - rowWidth) / 2);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      const captionLinesByPhoto = photosInRow.map((photo) => {
+        const note = String(photo?.nota || '').trim();
+        if (!note) return [];
+        return doc.splitTextToSize(`Descripción: ${note}`, cellW);
+      });
+      const maxCaptionLines = captionLinesByPhoto.reduce((max, lines) => Math.max(max, lines.length), 0);
+      const captionHeight = maxCaptionLines > 0 ? captionTopGap + maxCaptionLines * captionLeading : 0;
+      const rowHeight = cellH + captionHeight;
+      ensureSpace(rowHeight + (i + itemsInRow < r.fotos.length ? gapY : 0));
+
+      for (let col = 0; col < itemsInRow; col += 1) {
+        const x = startX + col * (cellW + gapX);
+        const photo = photosInRow[col];
+        const dataUrl = await dataURLFromURL(photo.url);
+        if (dataUrl) {
+          try { doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST'); } catch {
+            try { doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST'); } catch {}
+          }
+        }
+
+        const captionLines = captionLinesByPhoto[col] || [];
+        if (captionLines.length) {
+          const captionY = y + cellH + captionTopGap;
+          for (let j = 0; j < captionLines.length; j += 1) {
+            doc.text(captionLines[j], x, captionY + j * captionLeading);
+          }
         }
       }
+
+      i += itemsInRow;
+      y += rowHeight;
+      if (i < r.fotos.length) y += gapY;
     }
-    y += cellH + 10;
   }
 
   const nombre = (r.folio || `reporte_${Date.now()}`).replace(/[^A-Za-z0-9_\-]/g,'_') + '.pdf';

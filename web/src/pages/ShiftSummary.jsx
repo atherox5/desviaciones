@@ -388,37 +388,63 @@ export default function ShiftSummary({
         y += 9;
 
         if (entry.fotos?.length) {
-          const cellW = (pageW - margin * 2 - 20) / 3;
+          const perRow = 3;
+          const gapX = 10;
+          const gapY = 20;
+          const cellW = (pageW - margin * 2 - gapX * (perRow - 1)) / perRow;
           const cellH = 110;
+          const captionTopGap = 6;
+          const captionLeading = 10;
           ensureSpace(cellH + 36);
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(7);
           doc.text('Registro fotográfico:', margin, y);
           y += 16;
 
-          for (let i = 0; i < entry.fotos.length; i++) {
-            if (y > pageH - margin - cellH) {
-              doc.addPage();
-              y = margin;
-            }
-            const col = i % 3;
-            if (col === 0 && i > 0) y += cellH + 20;
-            const x = margin + col * (cellW + 10);
-            const foto = entry.fotos[i];
-            const dataUrl = await dataURLFromURL(foto.url);
-            if (dataUrl) {
-              try {
-                doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST');
-              } catch (error) {
+          for (let i = 0; i < entry.fotos.length; ) {
+            const photosInRow = entry.fotos.slice(i, i + perRow);
+            const itemsInRow = photosInRow.length;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7);
+            const captionLinesByPhoto = photosInRow.map((foto) => {
+              const note = String(foto?.nota || '').trim();
+              if (!note) return [];
+              return doc.splitTextToSize(`Descripción: ${note}`, cellW);
+            });
+            const maxCaptionLines = captionLinesByPhoto.reduce((max, lines) => Math.max(max, lines.length), 0);
+            const captionHeight = maxCaptionLines > 0 ? captionTopGap + maxCaptionLines * captionLeading : 0;
+            const rowHeight = cellH + captionHeight;
+            ensureSpace(rowHeight + (i + itemsInRow < entry.fotos.length ? gapY : 0));
+
+            for (let col = 0; col < itemsInRow; col += 1) {
+              const x = margin + col * (cellW + gapX);
+              const foto = photosInRow[col];
+              const dataUrl = await dataURLFromURL(foto.url);
+              if (dataUrl) {
                 try {
-                  doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST');
-                } catch {
-                  // ignore if fails
+                  doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST');
+                } catch (error) {
+                  try {
+                    doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST');
+                  } catch {
+                    // ignore if fails
+                  }
+                }
+              }
+
+              const captionLines = captionLinesByPhoto[col] || [];
+              if (captionLines.length) {
+                const captionY = y + cellH + captionTopGap;
+                for (let j = 0; j < captionLines.length; j += 1) {
+                  doc.text(captionLines[j], x, captionY + j * captionLeading);
                 }
               }
             }
+
+            i += itemsInRow;
+            y += rowHeight;
+            if (i < entry.fotos.length) y += gapY;
           }
-          y += cellH + 20;
         }
         y += 8;
       }

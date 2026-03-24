@@ -131,6 +131,7 @@ async function exportReportPDF(r) {
   addKV(`Folio: ${r.folio || '-'}`, `Fecha/Hora: ${r.fecha || '-'} ${r.hora || ''}`);
   addKV(`Propietario: ${r.ownerName || '-'}`, `Tipo: ${r.tipo || '-'}`);
   addKV(`Área: ${r.area || '-'}`, `Ubicación: ${r.ubicacion || '-'}`);
+  addKV(`N° Aviso SAP/Reporte: ${r.sapAviso || '-'}`, `Estado: ${r.status || '-'}`);
   y += 8;
 
   addSection('Descripción', r.descripcion);
@@ -144,6 +145,8 @@ async function exportReportPDF(r) {
     const gap = 12;
     const cellSize = Math.min((pageW - margin * 2 - gap) / 2, 200); // 2 por fila, cuadradas
     const perRow = 2;
+    const captionTopGap = 6;
+    const captionLeading = 10;
 
     // Si no cabe una fila entera en la página actual, arranca la sección en una nueva página
     if (y > pageH - margin - (cellSize + gap + 10)) { doc.addPage(); y = margin; }
@@ -155,14 +158,24 @@ async function exportReportPDF(r) {
     const cellW = cellSize;
     const cellH = cellSize;
     for (let i = 0; i < r.fotos.length; ) {
-      const available = pageH - margin - y;
-      if (available < cellH) { doc.addPage(); y = margin; }
-      const itemsInRow = Math.min(perRow, r.fotos.length - i);
+      const photosInRow = r.fotos.slice(i, i + perRow);
+      const itemsInRow = photosInRow.length;
       const rowWidth = itemsInRow * cellW + (itemsInRow - 1) * gap;
       const startX = margin + Math.max(0, (pageW - margin * 2 - rowWidth) / 2);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      const captionLinesByPhoto = photosInRow.map((photo) => {
+        const note = String(photo?.nota || '').trim();
+        if (!note) return [];
+        return doc.splitTextToSize(`Descripción: ${note}`, cellW);
+      });
+      const maxCaptionLines = captionLinesByPhoto.reduce((max, lines) => Math.max(max, lines.length), 0);
+      const captionHeight = maxCaptionLines > 0 ? captionTopGap + maxCaptionLines * captionLeading : 0;
+      const rowHeight = cellH + captionHeight;
+      ensureSpace(rowHeight + (i + itemsInRow < r.fotos.length ? gap : 0));
 
       for (let col = 0; col < itemsInRow; col += 1) {
-        const photo = r.fotos[i + col];
+        const photo = photosInRow[col];
         const x = startX + col * (cellW + gap);
         const dataUrl = await dataURLFromURL(photo.url);
         if (dataUrl) {
@@ -170,10 +183,18 @@ async function exportReportPDF(r) {
             try { doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST'); } catch { /* ignore */ }
           }
         }
+
+        const captionLines = captionLinesByPhoto[col] || [];
+        if (captionLines.length) {
+          const captionY = y + cellH + captionTopGap;
+          for (let j = 0; j < captionLines.length; j += 1) {
+            doc.text(captionLines[j], x, captionY + j * captionLeading);
+          }
+        }
       }
 
       i += itemsInRow;
-      y += cellH;
+      y += rowHeight;
       if (i < r.fotos.length) y += gap; // solo agrega espacio si quedan filas
     }
   }
