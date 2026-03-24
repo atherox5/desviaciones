@@ -587,8 +587,8 @@ async function exportReportPDF(r) {
     const gapY = 20;
     const cellW = (pageW - margin * 2 - gapX * (perRow - 1)) / perRow;
     const cellH = 110;
-    const captionTopGap = 6;
-    const captionLeading = 10;
+    const captionTopGap = 10;
+    const captionLeading = 12;
     for (let i = 0; i < r.fotos.length; ) {
       const photosInRow = r.fotos.slice(i, i + perRow);
       const itemsInRow = photosInRow.length;
@@ -609,11 +609,15 @@ async function exportReportPDF(r) {
       for (let col = 0; col < itemsInRow; col += 1) {
         const x = startX + col * (cellW + gapX);
         const photo = photosInRow[col];
-        const dataUrl = await dataURLFromURL(photo.url);
+        const photoUrl = String(photo?.url || '');
+        const dataUrl = await dataURLFromURL(photoUrl);
         if (dataUrl) {
           try { doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST'); } catch {
             try { doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST'); } catch {}
           }
+        }
+        if (typeof doc.link === 'function' && /^https?:\/\//i.test(photoUrl)) {
+          doc.link(x, y, cellW, cellH, { url: photoUrl });
         }
 
         const captionLines = captionLinesByPhoto[col] || [];

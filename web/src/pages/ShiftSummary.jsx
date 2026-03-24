@@ -393,8 +393,8 @@ export default function ShiftSummary({
           const gapY = 20;
           const cellW = (pageW - margin * 2 - gapX * (perRow - 1)) / perRow;
           const cellH = 110;
-          const captionTopGap = 6;
-          const captionLeading = 10;
+          const captionTopGap = 10;
+          const captionLeading = 12;
           ensureSpace(cellH + 36);
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(7);
@@ -419,7 +419,8 @@ export default function ShiftSummary({
             for (let col = 0; col < itemsInRow; col += 1) {
               const x = margin + col * (cellW + gapX);
               const foto = photosInRow[col];
-              const dataUrl = await dataURLFromURL(foto.url);
+              const photoUrl = String(foto?.url || '');
+              const dataUrl = await dataURLFromURL(photoUrl);
               if (dataUrl) {
                 try {
                   doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST');
@@ -430,6 +431,9 @@ export default function ShiftSummary({
                     // ignore if fails
                   }
                 }
+              }
+              if (typeof doc.link === 'function' && /^https?:\/\//i.test(photoUrl)) {
+                doc.link(x, y, cellW, cellH, { url: photoUrl });
               }
 
               const captionLines = captionLinesByPhoto[col] || [];

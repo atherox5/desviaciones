@@ -146,8 +146,8 @@ async function exportReportPDF(r) {
     const gap = 12;
     const cellSize = Math.min((pageW - margin * 2 - gap) / 2, 200); // 2 por fila, cuadradas
     const perRow = 2;
-    const captionTopGap = 6;
-    const captionLeading = 10;
+    const captionTopGap = 10;
+    const captionLeading = 12;
 
     // Si no cabe una fila entera en la página actual, arranca la sección en una nueva página
     if (y > pageH - margin - (cellSize + gap + 10)) { doc.addPage(); y = margin; }
@@ -178,11 +178,15 @@ async function exportReportPDF(r) {
       for (let col = 0; col < itemsInRow; col += 1) {
         const photo = photosInRow[col];
         const x = startX + col * (cellW + gap);
-        const dataUrl = await dataURLFromURL(photo.url);
+        const photoUrl = String(photo?.url || '');
+        const dataUrl = await dataURLFromURL(photoUrl);
         if (dataUrl) {
           try { doc.addImage(dataUrl, 'JPEG', x, y, cellW, cellH, undefined, 'FAST'); } catch {
             try { doc.addImage(dataUrl, 'PNG', x, y, cellW, cellH, undefined, 'FAST'); } catch { /* ignore */ }
           }
+        }
+        if (typeof doc.link === 'function' && /^https?:\/\//i.test(photoUrl)) {
+          doc.link(x, y, cellW, cellH, { url: photoUrl });
         }
 
         const captionLines = captionLinesByPhoto[col] || [];
