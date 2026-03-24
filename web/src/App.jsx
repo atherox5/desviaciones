@@ -492,15 +492,66 @@ async function dataURLFromURL(url) {
 async function exportReportPDF(r) {
   const { default: jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-  const margin = 40; const pageW = doc.internal.pageSize.getWidth(); const pageH = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const contentW = pageW - margin * 2;
+  const columnGap = 18;
+  const columnW = (contentW - columnGap) / 2;
   let y = margin;
 
-  const addTitle = (t) => { doc.setFontSize(16); doc.setFont('helvetica','bold'); doc.text(t, margin, y); y += 22; };
-  const addKV = (left, right) => { doc.setFontSize(11); doc.setFont('helvetica','normal'); doc.text(left, margin, y); doc.text(right, pageW/2, y); y += 16; };
+  const ensureSpace = (needed = 16) => {
+    if (y + needed > pageH - margin) {
+      doc.addPage();
+      y = margin;
+    }
+  };
+
+  const addTitle = (t) => {
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    const lines = doc.splitTextToSize(String(t || ''), contentW);
+    ensureSpace(lines.length * 20);
+    for (const line of lines) {
+      doc.text(line, margin, y);
+      y += 20;
+    }
+    y += 2;
+  };
+
+  const addKV = (left, right) => {
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    const lineH = 14;
+    const leftLines = doc.splitTextToSize(String(left || '-'), columnW);
+    const rightLines = doc.splitTextToSize(String(right || '-'), columnW);
+    const rowLines = Math.max(leftLines.length, rightLines.length);
+    ensureSpace(rowLines * lineH + 2);
+    for (let i = 0; i < leftLines.length; i += 1) {
+      doc.text(leftLines[i], margin, y + i * lineH);
+    }
+    for (let i = 0; i < rightLines.length; i += 1) {
+      doc.text(rightLines[i], margin + columnW + columnGap, y + i * lineH);
+    }
+    y += rowLines * lineH + 2;
+  };
+
   const addSection = (title, body) => {
-    if (!body) return; doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text(title, margin, y); y += 14; doc.setFont('helvetica','normal');
-    const lines = doc.splitTextToSize(body, pageW - margin*2);
-    for (const line of lines) { if (y > pageH - margin) { doc.addPage(); y = margin; } doc.text(line, margin, y); y += 14; }
+    if (!body) return;
+    const text = String(body).trim();
+    if (!text) return;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    ensureSpace(16);
+    doc.text(title, margin, y);
+    y += 14;
+    doc.setFont('helvetica', 'normal');
+    const lines = doc.splitTextToSize(text, contentW);
+    for (const line of lines) {
+      ensureSpace(14);
+      doc.text(line, margin, y);
+      y += 14;
+    }
     y += 6;
   };
   const addBadge = (label) => { const w = doc.getTextWidth(label)+14; const h=18; if (y > pageH - margin) { doc.addPage(); y = margin; }

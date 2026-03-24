@@ -326,6 +326,7 @@ export default function ShiftSummary({
     const margin = 48;
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
+    const contentW = pageW - margin * 2;
     let y = margin;
 
     const uniqueAreas = [...new Set(entries.map((e) => e.area).filter(Boolean))];
@@ -345,7 +346,7 @@ export default function ShiftSummary({
       const bold = opts.bold || false;
       doc.setFont('helvetica', bold ? 'bold' : 'normal');
       doc.setFontSize(size);
-      const lines = doc.splitTextToSize(text, pageW - margin * 2);
+      const lines = doc.splitTextToSize(String(text || '—'), contentW);
       for (const line of lines) {
         ensureSpace(leading + 4);
         doc.text(line, margin, y);
@@ -353,30 +354,33 @@ export default function ShiftSummary({
       }
     };
 
+    const addCenteredLine = (text, opts = {}) => {
+      const size = opts.size || 9;
+      const leading = opts.leading || 13;
+      const bold = opts.bold || false;
+      doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      doc.setFontSize(size);
+      const lines = doc.splitTextToSize(String(text || '—'), contentW);
+      for (const line of lines) {
+        ensureSpace(leading + 4);
+        doc.text(line, pageW / 2, y, { align: 'center' });
+        y += leading;
+      }
+    };
+
     const title = `Resumen semanal de novedades ${areaLabel}`.trim();
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.text(title, pageW / 2, y, { align: 'center' });
-    y += 18;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.text(`Turno: ${formatDisplayDate(fromDate)} – ${formatDisplayDate(toDate)}`, pageW / 2, y, { align: 'center' });
-    y += 14;
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.text(`Operador: ${operatorName}`, pageW / 2, y, { align: 'center' });
-    y += 18;
+    addCenteredLine(title, { size: 11, leading: 15, bold: true });
+    y += 3;
+    addCenteredLine(`Turno: ${formatDisplayDate(fromDate)} – ${formatDisplayDate(toDate)}`, { size: 9, leading: 13 });
+    addCenteredLine(`Operador: ${operatorName}`, { size: 9, leading: 13, bold: true });
+    y += 5;
 
     y += 6;
 
     for (const [ubicacionLabel, items] of groupedByLocation) {
       ensureSpace(60);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.text(`${ubicacionLabel}`, margin, y);
-      y += 14;
+      addLine(ubicacionLabel, { size: 9, leading: 12, bold: true });
+      y += 2;
 
       for (const entry of items) {
         ensureSpace(70);
